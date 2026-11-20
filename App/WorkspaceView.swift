@@ -5,10 +5,10 @@ import WebKit
 struct WorkspaceView: View {
     @Bindable var model: Library
     @Environment(\.colorScheme) private var colorScheme
-    @AppStorage("fontSize") private var fontSize = 16.0
-    @AppStorage("mermaid") private var mermaid = true
-    @AppStorage("math") private var math = true
-    @AppStorage("frontMatter") private var frontMatter = true
+    @AppStorage(StoredSettings.fontSize) private var fontSize = 16.0
+    @AppStorage(StoredSettings.mermaid) private var mermaid = true
+    @AppStorage(StoredSettings.math) private var math = true
+    @AppStorage(StoredSettings.frontMatter) private var frontMatter = true
     @State private var previewQuery = ""
     @State private var dropping = false
 
@@ -301,6 +301,7 @@ private struct PreviewPane: NSViewControllerRepresentable {
                 if model.mode == .read { model.mode = .split }
                 model.go(to: line)
             case ("link", let address as String): model.follow(address)
+            case ("copy", let text as String): model.copyCode(text)
             default: break
             }
         }

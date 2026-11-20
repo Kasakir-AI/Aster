@@ -12,6 +12,27 @@ const parser = new MarkdownIt({
   }
 });
 
+parser.inline.ruler.before("escape", "wikilink", (state, silent) => {
+  if (state.src[state.pos - 1] === "!" || !state.src.startsWith("[[", state.pos)) return false;
+  const end = state.src.indexOf("]]", state.pos + 2);
+  if (end === -1 || end >= state.posMax) return false;
+  const body = state.src.slice(state.pos + 2, end);
+  if (!body.trim() || /[\n\[\]]/.test(body)) return false;
+  const bar = body.indexOf("|");
+  const target = (bar === -1 ? body : body.slice(0, bar)).trim();
+  const label = (bar === -1 ? body : body.slice(bar + 1)).trim();
+  if (!target || !label) return false;
+  if (!silent) {
+    const open = state.push("link_open", "a", 1);
+    open.attrSet("href", "aster-wiki:" + encodeURIComponent(target));
+    const text = state.push("text", "", 0);
+    text.content = label;
+    state.push("link_close", "a", -1);
+  }
+  state.pos = end + 2;
+  return true;
+});
+
 parser.inline.ruler.before("escape", "formula", (state, silent) => {
   if (state.env.math === false || state.src[state.pos] !== "$") return false;
   const marker = state.src.startsWith("$$", state.pos) ? "$$" : "$";
@@ -54,7 +75,8 @@ parser.renderer.rules.fence = (tokens, index, options, env, renderer) => {
   if (token.info.trim() === "mermaid" && env.diagrams !== false) {
     return '<pre class="diagram" data-line="' + (token.map[0] + 1) + '">' + escape(token.content) + "</pre>";
   }
-  return renderFence(tokens, index, options, env, renderer);
+  const html = renderFence(tokens, index, options, env, renderer);
+  return env.interactive ? html.replace("</pre>", '<button type="button" class="copy-code">Copy</button></pre>') : html;
 };
 
 export function renderMarkdown(source, options = {}) {

@@ -48,7 +48,8 @@ li.task { list-style: none; }
 li.task > input, li.task > p > input { margin-inline-start: -1.4em; margin-inline-end: .3em; accent-color: var(--accent); }
 code, pre { font-family: "SF Mono", Menlo, monospace; font-size: .86em; }
 code { color: var(--warm); background: var(--wash); border-radius: .25em; padding: .13em .3em; }
-pre { padding: .9rem 1.1rem; overflow: auto; border: 1px solid var(--rule); background: var(--wash); border-radius: .45rem; white-space: pre; }
+pre { position: relative; padding: .9rem 1.1rem; overflow: auto; border: 1px solid var(--rule); background: var(--wash); border-radius: .45rem; white-space: pre; }
+.copy-code { position: absolute; top: .45rem; right: .45rem; font: 0.75rem -apple-system, sans-serif; color: var(--ink); background: var(--page); border: 1px solid var(--rule); border-radius: .25rem; padding: .05rem .4rem; }
 pre code { color: var(--ink); background: none; padding: 0; font-size: inherit; }
 blockquote { color: var(--mint); border-inline-start: .2rem solid var(--mint); padding-inline-start: 1rem; }
 hr { border: 0; border-top: 1px solid var(--rule); margin: 1.8em 0; }

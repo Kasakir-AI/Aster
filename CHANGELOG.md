@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.0
+
+- The editor runs in the sandbox and remembers folders and files you open. Images stored next to a note still appear.
+- Settings can keep document links inside the workspace. The setting starts off.
+- Help includes Report a Bug and Request a Feature. Each opens a GitHub issue with the Aster version filled in.
+- Settings states that notes stay on this Mac. Check for Updates looks for a newer GitHub release and does not install it.
+- A wikilink such as `[[Note]]` opens another note in the workspace.
+- A code block in the preview has a Copy button.
+- The status bar shows the word count for the open note.
+- Each document remembers the view mode you used for it.
+
 ## 0.2.3
 
 - Choosing Aster for Markdown files completes when Finder opens .md files in Aster. A Markdown type that macOS refuses to reassign no longer shows an error.

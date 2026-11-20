@@ -41,15 +41,19 @@ enum ReadingMode: String, CaseIterable, Identifiable {
 @MainActor @Observable final class Library {
     var notes: [Note] = []
     var selection: UUID? {
-        didSet { if oldValue != selection { jump = nil } }
+        didSet {
+            if oldValue != selection { jump = nil }
+            applyDocumentMode()
+        }
     }
     var active: Note? { notes.first { $0.id == selection } }
     var root: URL?
     var index = WorkspaceIndex.empty
     var indexing = false
     var mode: ReadingMode = .read {
-        didSet { UserDefaults.standard.set(mode.rawValue, forKey: "viewMode") }
+        didSet { rememberMode() }
     }
+    private var suppressModeSave = false
     var error: String?
     var jump: Jump?
     var sidebar = true
@@ -63,6 +67,7 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     private var indexTask: Task<Void, Never>?
     private var pendingIndex: Task<Void, Never>?
     private var pendingSaves: [UUID: Task<Void, Never>] = [:]
+    private var scoped: [URL] = []
 
     struct Jump: Equatable { let id = UUID(); let line: Int }
     enum Sheet: String, Identifiable { case search, openQuickly, links; var id: Self { self } }
@@ -77,6 +82,7 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     func open(_ url: URL, line: Int? = nil) {
         if url.scheme == "aster-markdown" { receiveXcode(url); return }
         let url = url.resolvingSymlinksInPath().standardizedFileURL
+        grant(url)
         if let note = notes.first(where: { $0.url == url }) {
             selection = note.id
         } else {
@@ -112,7 +118,9 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     }
 
     func openWorkspace(_ url: URL) {
-        root = url.resolvingSymlinksInPath().standardizedFileURL
+        let url = url.resolvingSymlinksInPath().standardizedFileURL
+        grant(url)
+        root = url
         sidebar = true
         index = .empty
         refreshIndex()
@@ -190,6 +198,7 @@ enum ReadingMode: String, CaseIterable, Identifiable {
                 return false
             }
             try data.write(to: url, options: .atomic)
+            grant(url)
             note.url = url
             note.saved = note.text
             note.conflict = false
@@ -264,12 +273,34 @@ enum ReadingMode: String, CaseIterable, Identifiable {
         mode = modes[((modes.firstIndex(of: mode) ?? 0) + 1) % modes.count]
     }
 
+    func copyCode(_ text: String) {
+        let board = NSPasteboard.general
+        board.clearContents()
+        board.setString(text, forType: .string)
+    }
+
     func follow(_ address: String) {
+        if let source = active?.url, let match = WorkspaceIndex.wikiMatch(address, among: wikiNotes(near: source), near: source) {
+            if UserDefaults.standard.bool(forKey: StoredSettings.workspaceLinksOnly),
+               !FolderAccess.linkStaysInside(match.url, workspace: root, document: source) {
+                return
+            }
+            open(match.url)
+            if active?.url == match.url, let heading = match.heading,
+               let found = WorkspaceIndex.heading(matching: heading, in: active?.text ?? "") {
+                go(to: found.line)
+            }
+            return
+        }
         if let url = URL(string: address), let scheme = url.scheme?.lowercased() {
             if ["http", "https", "mailto"].contains(scheme) { NSWorkspace.shared.open(url) }
             return
         }
         guard let source = active?.url, let target = MarkdownFile.localURL(address, relativeTo: source) else { return }
+        if UserDefaults.standard.bool(forKey: StoredSettings.workspaceLinksOnly),
+           !FolderAccess.linkStaysInside(target, workspace: root, document: source) {
+            return
+        }
         if MarkdownFile.isMarkdown(target) {
             open(target)
             if active?.url == target, let fragment = address.split(separator: "#", maxSplits: 1).dropFirst().first,
@@ -294,26 +325,27 @@ enum ReadingMode: String, CaseIterable, Identifiable {
         note.text = text
         scheduleIndexRefresh()
         pendingSaves.removeValue(forKey: note.id)?.cancel()
-        guard UserDefaults.standard.bool(forKey: "autoSave"), note.url != nil, note.dirty else { return }
+        guard UserDefaults.standard.bool(forKey: StoredSettings.autoSave), note.url != nil, note.dirty else { return }
         pendingSaves[note.id] = Task { [weak self, weak note] in
             try? await Task.sleep(for: .milliseconds(900))
             guard !Task.isCancelled, let self, let note else { return }
             pendingSaves.removeValue(forKey: note.id)
-            if UserDefaults.standard.bool(forKey: "autoSave"), note.dirty {
+            if UserDefaults.standard.bool(forKey: StoredSettings.autoSave), note.dirty {
                 save(note, automatic: true)
             }
         }
     }
 
     func restore() {
+        restoreAccess()
         let defaults = UserDefaults.standard
-        if let value = defaults.string(forKey: "viewMode"), let previous = ReadingMode(rawValue: value) { mode = previous }
-        guard defaults.object(forKey: "restoreSession") as? Bool ?? true else { return }
-        if let folder = defaults.url(forKey: "workspace"), FileManager.default.fileExists(atPath: folder.path) {
+        if let value = defaults.string(forKey: StoredSettings.viewMode), let previous = ReadingMode(rawValue: value) { mode = previous }
+        guard defaults.object(forKey: StoredSettings.restoreSession) as? Bool ?? true else { return }
+        if let folder = defaults.url(forKey: StoredSettings.workspace), FileManager.default.fileExists(atPath: folder.path) {
             root = folder.standardizedFileURL
         }
-        let paths = defaults.stringArray(forKey: "openDocuments") ?? []
-        let selectedPath = defaults.string(forKey: "selectedDocument")
+        let paths = defaults.stringArray(forKey: StoredSettings.openDocuments) ?? []
+        let selectedPath = defaults.string(forKey: StoredSettings.selectedDocument)
         for path in paths where FileManager.default.fileExists(atPath: path) { open(URL(fileURLWithPath: path)) }
         if let selectedPath, let note = notes.first(where: { $0.url?.path == selectedPath }) { selection = note.id }
         refreshIndex()
@@ -322,9 +354,60 @@ enum ReadingMode: String, CaseIterable, Identifiable {
 
     func persist() {
         let defaults = UserDefaults.standard
-        defaults.set(root, forKey: "workspace")
-        defaults.set(notes.compactMap { $0.url?.path }, forKey: "openDocuments")
-        defaults.set(active?.url?.path, forKey: "selectedDocument")
+        defaults.set(root, forKey: StoredSettings.workspace)
+        defaults.set(notes.compactMap { $0.url?.path }, forKey: StoredSettings.openDocuments)
+        defaults.set(active?.url?.path, forKey: StoredSettings.selectedDocument)
+    }
+
+    private func wikiNotes(near document: URL) -> [URL] {
+        if !index.entries.isEmpty { return index.entries.map(\.url) }
+        let folder = document.deletingLastPathComponent()
+        let contents = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        return contents.filter { MarkdownFile.isMarkdown($0) }
+    }
+
+    private func rememberMode() {
+        guard !suppressModeSave else { return }
+        if let path = active?.url?.path {
+            let stored = UserDefaults.standard.object(forKey: StoredSettings.documentViewModes) as? [String: String] ?? [:]
+            UserDefaults.standard.set(DocumentModes.remembering(mode.rawValue, for: path, in: stored), forKey: StoredSettings.documentViewModes)
+        } else {
+            UserDefaults.standard.set(mode.rawValue, forKey: StoredSettings.viewMode)
+        }
+    }
+
+    private func applyDocumentMode() {
+        guard let path = active?.url?.path else { return }
+        let stored = UserDefaults.standard.object(forKey: StoredSettings.documentViewModes) as? [String: String] ?? [:]
+        let fallback = UserDefaults.standard.string(forKey: StoredSettings.viewMode).flatMap(ReadingMode.init(rawValue:)) ?? .read
+        let saved = DocumentModes.raw(for: path, in: stored).flatMap(ReadingMode.init(rawValue:)) ?? fallback
+        guard saved != mode else { return }
+        suppressModeSave = true
+        mode = saved
+        suppressModeSave = false
+    }
+
+    private func restoreAccess() {
+        let blobs = UserDefaults.standard.object(forKey: StoredSettings.folderBookmarks) as? [Data] ?? []
+        for data in blobs {
+            guard let url = FolderAccess.resolve(data) else { continue }
+            retain(url.resolvingSymlinksInPath().standardizedFileURL)
+        }
+    }
+
+    private func grant(_ url: URL) {
+        let url = url.resolvingSymlinksInPath().standardizedFileURL
+        if scoped.contains(where: { $0 == url || FolderAccess.contains(url, in: $0) }) { return }
+        retain(url)
+        guard let data = FolderAccess.bookmark(for: url) else { return }
+        var blobs = UserDefaults.standard.object(forKey: StoredSettings.folderBookmarks) as? [Data] ?? []
+        blobs.append(data)
+        UserDefaults.standard.set(blobs, forKey: StoredSettings.folderBookmarks)
+    }
+
+    private func retain(_ url: URL) {
+        _ = url.startAccessingSecurityScopedResource()
+        scoped.append(url)
     }
 
     private func scheduleIndexRefresh() {
@@ -348,8 +431,8 @@ enum ReadingMode: String, CaseIterable, Identifiable {
             notes.append(note)
             selection = note.id
         }
-        let remembered = UserDefaults.standard.object(forKey: "viewMode")
+        let remembered = UserDefaults.standard.object(forKey: StoredSettings.viewMode)
         if mode == .source || mode == .styled { mode = .read }
-        UserDefaults.standard.set(remembered, forKey: "viewMode")
+        UserDefaults.standard.set(remembered, forKey: StoredSettings.viewMode)
     }
 }

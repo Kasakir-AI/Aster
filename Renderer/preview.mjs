@@ -102,6 +102,14 @@ window.addEventListener("scroll", () => {
 }, { passive: true });
 
 article.addEventListener("click", event => {
+  const copy = event.target.closest(".copy-code");
+  if (copy) {
+    event.preventDefault();
+    const code = copy.parentElement?.querySelector("code");
+    if (code) post("copy", code.textContent ?? "");
+    copy.textContent = "Copied";
+    return;
+  }
   const link = event.target.closest("a[href]");
   if (link) {
     const address = link.getAttribute("href");
@@ -139,6 +147,7 @@ article.addEventListener("error", event => {
 
 window.exportContent = () => {
   const clone = article.cloneNode(true);
+  clone.querySelectorAll(".copy-code").forEach(button => button.remove());
   for (const checkbox of clone.querySelectorAll("input")) {
     checkbox.disabled = true;
     checkbox.toggleAttribute("checked", checkbox.checked);

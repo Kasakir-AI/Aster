@@ -15,11 +15,12 @@ import UniformTypeIdentifiers
         ---
         # Getting started
 
-        See [Water](Guides/Caf%C3%A9%20Notes.md#river) and [Missing](Missing.md).
+        See [Water](Guides/Caf%C3%A9%20Notes.md#river) and [Missing](Missing.md) and [[Café Notes#River]].
         - [ ] Read the guide
 
         ```swift
         # This is not a heading
+        [[Phantom]]
         ```
 
         [water]: <Guides/Café Notes.md>
@@ -29,6 +30,31 @@ import UniformTypeIdentifiers
         try markdown.write(to: landing, atomically: true, encoding: .utf8)
         try "# River\n\nFresh water observations.".write(to: water, atomically: true, encoding: .utf8)
 
+        let notes = URL(fileURLWithPath: "/notes")
+        precondition(FolderAccess.contains(URL(fileURLWithPath: "/notes/Guides/a.md"), in: notes))
+        precondition(FolderAccess.contains(notes, in: notes))
+        precondition(!FolderAccess.contains(URL(fileURLWithPath: "/notes-secret/a.md"), in: notes))
+        precondition(!FolderAccess.contains(URL(fileURLWithPath: "/other/a.md"), in: notes))
+        let document = URL(fileURLWithPath: "/notes/Start.md")
+        precondition(FolderAccess.linkStaysInside(URL(fileURLWithPath: "/notes/Guides/a.md"), workspace: notes, document: document))
+        precondition(!FolderAccess.linkStaysInside(URL(fileURLWithPath: "/other/a.md"), workspace: notes, document: document))
+        precondition(FolderAccess.linkStaysInside(URL(fileURLWithPath: "/notes/Guides/a.md"), workspace: nil, document: document))
+        precondition(!FolderAccess.linkStaysInside(URL(fileURLWithPath: "/other/a.md"), workspace: nil, document: document))
+        let bug = IssueReport.url(feature: false, version: "0.2.3")
+        let feature = IssueReport.url(feature: true, version: "0.2.3")
+        precondition(bug?.absoluteString.contains("title=Bug%20report") == true)
+        precondition(bug?.absoluteString.contains("Aster%200.2.3") == true)
+        precondition(feature?.absoluteString.contains("title=Feature%20request") == true)
+        precondition(feature?.host == "github.com")
+        let release = Data(#"{"tag_name":"v0.2.4"}"#.utf8)
+        precondition(ReleaseLookup.version(in: release) == "0.2.4")
+        precondition(ReleaseLookup.version(in: Data("{}".utf8)) == nil)
+        precondition(ReleaseLookup.version(in: Data(#"{"tag_name":"v1.0"}"#.utf8)) == nil)
+        precondition(ReleaseLookup.isNewer("0.2.4", than: "0.2.3"))
+        precondition(!ReleaseLookup.isNewer("0.2.3", than: "0.2.3"))
+        precondition(ReleaseLookup.isNewer("0.10.0", than: "0.9.9"))
+        precondition(ReleaseLookup.isNewer("1.0.0", than: "0.2.3"))
+        precondition(ReleaseLookup.latest.host == "api.github.com")
         precondition(MarkdownFile.canBecomeDefault(UTType(filenameExtension: "md")!))
         precondition(MarkdownFile.canBecomeDefault(UTType("net.daringfireball.markdown")!))
         precondition(MarkdownFile.canBecomeDefault(.plainText))
@@ -80,8 +106,13 @@ import UniformTypeIdentifiers
         precondition(index.tree.count == 2 && index.entries.count == 2)
         precondition(index.links.contains { $0.target == water && !$0.broken })
         precondition(index.links.filter(\.broken).map(\.target.lastPathComponent) == ["Missing.md"])
-        precondition(index.links.filter { $0.target == water && !$0.broken }.count == 2)
+        precondition(index.links.filter { $0.target == water && !$0.broken }.count == 3)
         precondition(!index.links.contains { $0.address.contains("Phantom") })
+        let wiki = WorkspaceIndex.wikiMatch("aster-wiki:Caf%C3%A9%20Notes%23River", among: [water], near: landing)
+        precondition(wiki?.url == water && wiki?.heading == "River")
+        precondition(WorkspaceIndex.wikiMatch("[[Café Notes]]", among: [water], near: landing)?.url == water)
+        precondition(DocumentModes.remembering("Source", for: landing.path, in: [:])[landing.path] == "Source")
+        precondition(DocumentModes.raw(for: "/missing.md", in: [:]) == nil)
         let results = try index.search("cafe observations", mode: .sections)
         precondition(results.first?.url == water && results.first?.line == 1)
         let regex = try index.search("FRESH.*water", mode: .regex)

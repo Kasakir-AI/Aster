@@ -65,10 +65,13 @@ struct WorkspaceIndex {
         }
         entries.sort { $0.url.path.localizedStandardCompare($1.url.path) == .orderedAscending }
         let addresses = Set(entries.map(\.url))
+        let notes = entries.map(\.url)
         let links = entries.flatMap { entry in
             let matches = proseLines(entry.source).flatMap { _, row in linkAddresses(on: row) }
             return matches.enumerated().compactMap { ordinal, address -> DocumentLink? in
-                guard let target = MarkdownFile.localURL(address, relativeTo: entry.url), MarkdownFile.isMarkdown(target) else { return nil }
+                let target = wikiMatch(address, among: notes, near: entry.url)?.url
+                    ?? MarkdownFile.localURL(address, relativeTo: entry.url)
+                guard let target, MarkdownFile.isMarkdown(target) else { return nil }
                 return DocumentLink(source: entry.url, target: target, address: address,
                                     broken: !addresses.contains(target) && !FileManager.default.fileExists(atPath: target.path),
                                     ordinal: ordinal)
@@ -163,11 +166,48 @@ struct WorkspaceIndex {
             if let bracketed = match.output.1 { found.append(String(bracketed)) }
             else if let plain = match.output.2 { found.append(String(plain)) }
         }
+        for match in row.matches(of: /\[\[([^\[\]\n]+)\]\]/) {
+            let start = match.range.lowerBound
+            if start > row.startIndex, row[row.index(before: start)] == "!" { continue }
+            found.append(String(match.output.0))
+        }
         if let reference = row.firstMatch(of: /^ {0,3}\[[^\]\n]+\]:[ \t]+(?:<([^>\n]+)>|(\S+))/) {
             if let bracketed = reference.output.1 { found.append(String(bracketed)) }
             else if let plain = reference.output.2 { found.append(String(plain)) }
         }
         return found
+    }
+
+    struct WikiMatch {
+        let url: URL
+        let heading: String?
+    }
+
+    static func wikiMatch(_ address: String, among notes: [URL], near document: URL) -> WikiMatch? {
+        guard let parsed = wikiTarget(address) else { return nil }
+        let folded = parsed.name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+        let matches = notes.filter {
+            $0.deletingPathExtension().lastPathComponent.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current) == folded
+        }
+        let folder = document.deletingLastPathComponent()
+        guard let chosen = matches.first(where: { $0.deletingLastPathComponent() == folder }) ?? matches.min(by: { $0.path.count < $1.path.count }) else { return nil }
+        return WikiMatch(url: chosen, heading: parsed.heading)
+    }
+
+    private static func wikiTarget(_ address: String) -> (name: String, heading: String?)? {
+        let body: String
+        if address.hasPrefix("aster-wiki:") {
+            guard let decoded = String(address.dropFirst("aster-wiki:".count)).removingPercentEncoding else { return nil }
+            body = decoded
+        } else if address.hasPrefix("[["), address.hasSuffix("]]") {
+            body = String(String(address.dropFirst(2).dropLast(2)).split(separator: "|", maxSplits: 1).first ?? "")
+        } else {
+            return nil
+        }
+        let parts = body.split(separator: "#", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard let name = parts.first, !name.isEmpty else { return nil }
+        let heading = parts.count > 1 && !parts[1].isEmpty ? parts[1] : nil
+        return (name, heading)
     }
 
     private static func isIndentedCode(_ row: String) -> Bool {

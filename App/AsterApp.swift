@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 @main struct AsterApp: App {
     @NSApplicationDelegateAdaptor(AsterDelegate.self) private var delegate
     @Environment(\.openWindow) private var openWindow
-    @AppStorage("appearance") private var appearance = AsterAppearance.initial
+    @AppStorage(StoredSettings.appearance) private var appearance = AsterAppearance.initial
 
     var body: some Scene {
         Window("Aster", id: "workspace") {
@@ -124,6 +124,10 @@ private struct AsterCommands: Commands {
             Button("Inline Code") { model.editor?.wrap(with: "`") }
                 .keyboardShortcut("`", modifiers: [.command, .option]).disabled(!canFormat)
         }
+        CommandGroup(after: .help) {
+            Button("Report a Bug") { report(feature: false) }
+            Button("Request a Feature") { report(feature: true) }
+        }
         CommandGroup(after: .toolbar) {
             Divider()
             Button("Cycle View Mode") { model.cycleMode() }.keyboardShortcut("r", modifiers: [.command, .shift])
@@ -141,6 +145,12 @@ private struct AsterCommands: Commands {
     }
 
     private var canFormat: Bool { model.mode != .read && model.active != nil }
+
+    private func report(feature: Bool) {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        guard let url = IssueReport.url(feature: feature, version: version) else { return }
+        NSWorkspace.shared.open(url)
+    }
 
     private func export(pdf: Bool) {
         guard let note = model.active, let renderer = model.renderer else { return }
@@ -166,7 +176,7 @@ private struct AsterCommands: Commands {
 }
 
 enum MarkdownDefault {
-    private static let askedKey = "didAskMarkdownDefault"
+    private static let askedKey = StoredSettings.didAskMarkdownDefault
 
     static var contentTypes: [UTType] {
         var seen: Set<String> = []
@@ -229,19 +239,24 @@ enum MarkdownDefault {
 
 private struct AsterSettings: View {
     @Binding var appearance: AsterAppearance
-    @AppStorage("fontSize") private var fontSize = 16.0
-    @AppStorage("restoreSession") private var restoreSession = true
-    @AppStorage("autoSave") private var autoSave = false
-    @AppStorage("mermaid") private var mermaid = true
-    @AppStorage("math") private var math = true
-    @AppStorage("frontMatter") private var frontMatter = true
+    @AppStorage(StoredSettings.fontSize) private var fontSize = 16.0
+    @AppStorage(StoredSettings.restoreSession) private var restoreSession = true
+    @AppStorage(StoredSettings.autoSave) private var autoSave = false
+    @AppStorage(StoredSettings.mermaid) private var mermaid = true
+    @AppStorage(StoredSettings.math) private var math = true
+    @AppStorage(StoredSettings.frontMatter) private var frontMatter = true
+    @AppStorage(StoredSettings.workspaceLinksOnly) private var workspaceLinksOnly = false
     @State private var markdownDefault = MarkdownDefault.isDefault()
     @State private var defaultError: String?
+    @State private var checkingForUpdates = false
+    @State private var updateStatus: String?
+    @State private var availableRelease: String?
 
     var body: some View {
         Form {
             Section("Workspace") {
                 Toggle("Reopen documents and workspace on launch", isOn: $restoreSession)
+                Toggle("Open document links only inside the workspace", isOn: $workspaceLinksOnly)
                 Toggle("Automatically save changes", isOn: $autoSave)
                 if markdownDefault {
                     Text("Aster opens Markdown files from Finder.")
@@ -266,7 +281,45 @@ private struct AsterSettings: View {
                 Toggle("Render math", isOn: $math)
                 Toggle("Show YAML front matter", isOn: $frontMatter)
             }
+            Section("Privacy") {
+                Text("Notes stay in files on this Mac. Aster has no account and does not send notes or usage data.")
+                Button("Check for Updates") { Task { await checkForUpdates() } }
+                    .disabled(checkingForUpdates)
+                if let updateStatus { Text(updateStatus) }
+                if let availableRelease {
+                    Button("Open Aster \(availableRelease) on GitHub") {
+                        NSWorkspace.shared.open(ReleaseLookup.releases)
+                    }
+                }
+            }
         }
-        .formStyle(.grouped).frame(width: 450, height: 430)
+        .formStyle(.grouped).frame(width: 450, height: 620)
+    }
+
+    private func checkForUpdates() async {
+        checkingForUpdates = true
+        availableRelease = nil
+        updateStatus = "Checking for updates."
+        defer { checkingForUpdates = false }
+        var request = URLRequest(url: ReleaseLookup.latest)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 15
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  let latest = ReleaseLookup.version(in: data) else {
+                updateStatus = "Aster could not check for updates."
+                return
+            }
+            let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+            if ReleaseLookup.isNewer(latest, than: current) {
+                availableRelease = latest
+                updateStatus = "Aster \(latest) is available."
+            } else {
+                updateStatus = "Aster \(current) is the latest release."
+            }
+        } catch {
+            updateStatus = "Aster could not check for updates."
+        }
     }
 }

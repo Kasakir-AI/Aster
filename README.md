@@ -9,6 +9,8 @@ Aster is a native macOS editor and reader for Markdown. Open a single file or wo
 - Read, write, edit source, or see the source and preview side by side with synchronized scrolling.
 - Render tables, task lists, syntax-highlighted code, Mermaid diagrams, math, and YAML front matter offline.
 - Browse a folder in tabs, jump to headings, search sections or matching lines, and inspect backlinks and broken document links.
+- Open another note in the workspace with a wikilink such as `[[Note]]`. Copy a code block from the preview.
+- See the word count for the open note. Each note keeps the view mode you last used for it.
 - Edit with native find and replace, formatting shortcuts, focus mode, and typewriter mode.
 - Print a preview or export it as HTML or PDF.
 
@@ -70,6 +72,10 @@ open .build/Xcode/Build/Products/Release/Aster.app
 ```
 
 The build installs the locked renderer dependencies, runs the tests, and creates a universal app bundle. Run `./test.sh` to repeat the tests after installing those dependencies. Run `./scripts/package.sh .build/dist` after a successful build to create and verify the DMG, ZIP, and checksum file.
+
+## Privacy
+
+Notes stay in files on this Mac. Aster has no account. It does not send notes or usage data. Check for Updates in Settings asks GitHub whether a newer release exists. That check does not download the release. Report a Bug and Request a Feature open a GitHub issue only when you choose them.
 
 ## Contributing
 

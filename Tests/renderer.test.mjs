@@ -68,4 +68,14 @@ test("Finder previews render common Markdown syntax and noninteractive task cont
   assert.match(html, /<em>em<\/em> <strong>strong<\/strong> <s>strike<\/s>/);
   assert.match(html, /data-task-line="6" checked disabled/);
   assert.match(html, /class="hljs-string"/);
+  assert.doesNotMatch(html, /copy-code/);
+});
+
+test("wikilinks become note links and a code block can be copied", () => {
+  const html = renderMarkdown("See [[Café Notes#River|the river]] and `[[Not a link]]`.\n\n```\n[[Code]]\nlet x = 1\n```\n", { interactive: true });
+  assert.match(html, /href="aster-wiki:Caf%C3%A9%20Notes%23River"/);
+  assert.match(html, />the river</);
+  assert.doesNotMatch(html, /aster-wiki:Not/);
+  assert.doesNotMatch(html, /aster-wiki:Code/);
+  assert.match(html, /class="copy-code"/);
 });

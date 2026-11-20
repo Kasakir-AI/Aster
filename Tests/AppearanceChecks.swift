@@ -5,8 +5,49 @@ import AppKit
         _ = NSApplication.shared
         precondition(RenderOptions().arguments(preserveScroll: false)["appearance"] as? String == "dark",
                      "A preview with no preference should be dark")
-        precondition(AsterAppearance(rawValue: "light") == .light && AsterAppearance(rawValue: "system") == .system,
+        precondition(AsterAppearance(rawValue: "dark") == .dark
+                     && AsterAppearance(rawValue: "light") == .light
+                     && AsterAppearance(rawValue: "system") == .system,
                      "Saved appearances must retain their meaning")
+        precondition(ReadingMode(rawValue: "Read") == .read
+                     && ReadingMode(rawValue: "Write") == .styled
+                     && ReadingMode(rawValue: "Source") == .source
+                     && ReadingMode(rawValue: "Split") == .split,
+                     "Saved view modes must retain their meaning")
+        let suite = "aster-settings-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("light", forKey: "appearance")
+        defaults.set(18.0, forKey: "fontSize")
+        defaults.set(false, forKey: "restoreSession")
+        defaults.set(true, forKey: "autoSave")
+        defaults.set(false, forKey: "mermaid")
+        defaults.set(false, forKey: "math")
+        defaults.set(false, forKey: "frontMatter")
+        defaults.set("Source", forKey: "viewMode")
+        defaults.set(true, forKey: "didAskMarkdownDefault")
+        defaults.set(["/notes/a.md"], forKey: "openDocuments")
+        defaults.set("/notes/a.md", forKey: "selectedDocument")
+        let folder = URL(fileURLWithPath: "/notes")
+        defaults.set(folder, forKey: "workspace")
+        defaults.set([Data([1, 2, 3])], forKey: "folderBookmarks")
+        defaults.set(true, forKey: "workspaceLinksOnly")
+        defaults.set(["/notes/a.md": "Split"], forKey: "documentViewModes")
+        precondition(defaults.string(forKey: StoredSettings.appearance) == "light")
+        precondition(defaults.object(forKey: StoredSettings.fontSize) as? Double == 18)
+        precondition(defaults.object(forKey: StoredSettings.restoreSession) as? Bool == false)
+        precondition(defaults.object(forKey: StoredSettings.autoSave) as? Bool == true)
+        precondition(defaults.object(forKey: StoredSettings.mermaid) as? Bool == false)
+        precondition(defaults.object(forKey: StoredSettings.math) as? Bool == false)
+        precondition(defaults.object(forKey: StoredSettings.frontMatter) as? Bool == false)
+        precondition(ReadingMode(rawValue: defaults.string(forKey: StoredSettings.viewMode) ?? "") == .source)
+        precondition(defaults.object(forKey: StoredSettings.didAskMarkdownDefault) as? Bool == true)
+        precondition(defaults.stringArray(forKey: StoredSettings.openDocuments) == ["/notes/a.md"])
+        precondition(defaults.string(forKey: StoredSettings.selectedDocument) == "/notes/a.md")
+        precondition(defaults.url(forKey: StoredSettings.workspace) == folder)
+        precondition(defaults.array(forKey: StoredSettings.folderBookmarks) as? [Data] == [Data([1, 2, 3])])
+        precondition(defaults.object(forKey: StoredSettings.workspaceLinksOnly) as? Bool == true)
+        precondition(defaults.object(forKey: StoredSettings.documentViewModes) as? [String: String] == ["/notes/a.md": "Split"])
         for palette in [AsterPalette.dark, .light] {
             let text = [palette.ink, palette.muted, palette.heading, palette.link,
                         palette.emphasis, palette.code, palette.quote, palette.marker]
