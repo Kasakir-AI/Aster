@@ -4,6 +4,10 @@
 
 Aster is a native macOS editor and reader for Markdown. Open a single file or work through a folder of notes. Finder can show a rendered preview when you press Space, even while Aster is closed.
 
+<img src="Docs/reading.png" width="880" alt="Aster reading a Markdown note">
+
+<img src="Docs/split.png" width="880" alt="Aster with the source and preview side by side">
+
 ## What you can do
 
 - Read, write, edit source, or see the source and preview side by side with synchronized scrolling.
