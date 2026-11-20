@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 @main enum CoreChecks {
     static func main() throws {
@@ -28,6 +29,9 @@ import Foundation
         try markdown.write(to: landing, atomically: true, encoding: .utf8)
         try "# River\n\nFresh water observations.".write(to: water, atomically: true, encoding: .utf8)
 
+        precondition(MarkdownFile.canBecomeDefault(UTType(filenameExtension: "md")!))
+        precondition(MarkdownFile.canBecomeDefault(UTType("net.daringfireball.markdown")!))
+        precondition(UTType("public.markdown").map(MarkdownFile.canBecomeDefault) == false)
         precondition(MarkdownFile.toggleTask(at: 7, in: markdown)?.contains("- [x] Read") == true)
         precondition(MarkdownFile.toggleTask(at: 9, in: markdown) == nil)
         precondition(MarkdownFile.toggleTask(at: 2, in: "🪻\r\n1. [X] Reviewed\r\n") == "🪻\r\n1. [ ] Reviewed\r\n")

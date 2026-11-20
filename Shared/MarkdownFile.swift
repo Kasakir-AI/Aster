@@ -9,6 +9,13 @@ enum MarkdownFile {
         extensions.contains(url.pathExtension.lowercased())
     }
 
+    /// macOS accepts a default-app change for file types. `public.markdown` is declared with
+    /// filename extensions but does not conform to `public.data`, and Launch Services refuses
+    /// `setDefaultApplication` for it.
+    static func canBecomeDefault(_ type: UTType) -> Bool {
+        type.conforms(to: .data)
+    }
+
     enum Encoding {
         case utf8, utf8BOM, utf16LE, utf16BE, legacy(String.Encoding)
 

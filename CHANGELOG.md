@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3
+
+- Choosing Aster for Markdown files completes when Finder opens .md files in Aster. A Markdown type that macOS refuses to reassign no longer shows an error.
+
 ## 0.2.2
 
 - A heading link opens that heading when the link uses different capital letters.

@@ -184,7 +184,7 @@ enum MarkdownDefault {
 
     static func isDefault(app: URL = Bundle.main.bundleURL) -> Bool {
         let target = app.resolvingSymlinksInPath().standardizedFileURL
-        let probes = [UTType(filenameExtension: "md"), UTType("public.markdown"), UTType("net.daringfireball.markdown")].compactMap { $0 }
+        let probes = contentTypes.filter(MarkdownFile.canBecomeDefault)
         guard !probes.isEmpty else { return false }
         return probes.allSatisfy { type in
             NSWorkspace.shared.urlForApplication(toOpen: type)?.resolvingSymlinksInPath().standardizedFileURL == target
@@ -192,7 +192,7 @@ enum MarkdownDefault {
     }
 
     static func makeDefault(app: URL = Bundle.main.bundleURL, completion: @escaping (Error?) -> Void) {
-        let types = contentTypes
+        let types = contentTypes.filter(MarkdownFile.canBecomeDefault)
         guard !types.isEmpty else { completion(nil); return }
         var remaining = types.count
         var failure: Error?
