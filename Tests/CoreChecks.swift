@@ -31,7 +31,8 @@ import UniformTypeIdentifiers
 
         precondition(MarkdownFile.canBecomeDefault(UTType(filenameExtension: "md")!))
         precondition(MarkdownFile.canBecomeDefault(UTType("net.daringfireball.markdown")!))
-        precondition(UTType("public.markdown").map(MarkdownFile.canBecomeDefault) == false)
+        precondition(MarkdownFile.canBecomeDefault(.plainText))
+        precondition(!MarkdownFile.canBecomeDefault(.folder))
         precondition(MarkdownFile.toggleTask(at: 7, in: markdown)?.contains("- [x] Read") == true)
         precondition(MarkdownFile.toggleTask(at: 9, in: markdown) == nil)
         precondition(MarkdownFile.toggleTask(at: 2, in: "🪻\r\n1. [X] Reviewed\r\n") == "🪻\r\n1. [ ] Reviewed\r\n")
