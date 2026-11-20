@@ -350,10 +350,6 @@ enum ReadingMode: String, CaseIterable, Identifiable {
         }
         let remembered = UserDefaults.standard.object(forKey: "viewMode")
         if mode == .source || mode == .styled { mode = .read }
-        if let remembered {
-            UserDefaults.standard.set(remembered, forKey: "viewMode")
-        } else {
-            UserDefaults.standard.removeObject(forKey: "viewMode")
-        }
+        UserDefaults.standard.set(remembered, forKey: "viewMode")
     }
 }
