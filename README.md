@@ -16,20 +16,33 @@ Aster works with plain Markdown files on disk. It displays local images from the
 
 ## Install
 
-Aster targets macOS 14 and later on Apple silicon and Intel. Download the ZIP from [Releases](https://github.com/Kasakir-AI/Aster/releases), extract it, and move Aster to Applications. Launch it once to register its extensions.
+Aster targets macOS 14 and later on Apple silicon and Intel. Download the DMG from [Releases](https://github.com/Kasakir-AI/Aster/releases), open it, and drag Aster to Applications. A ZIP is also available. Launch Aster once to register its extensions.
 
-Finder Quick Look renders math and displays Mermaid blocks as source. Open the file in Aster to see the diagram.
+You can also install Aster with Homebrew.
 
+```sh
+brew install --cask kasakir-ai/tap/aster
+```
 
-The download is ad hoc signed and unnotarized. If macOS blocks the download, build and run Aster locally using the instructions below.
+Run `brew update` and `brew upgrade --cask kasakir-ai/tap/aster` to update.
+
+The app is ad hoc signed and unnotarized. If macOS blocks the download, build and run Aster locally using the instructions below.
 
 ### Finder Quick Look
 
 In Finder, select a Markdown file and press Space. If Finder shows raw text, look for **Aster Markdown Preview** under **System Settings → General → Login Items & Extensions → Quick Look**. Check for another enabled Markdown preview provider if Finder still shows a different preview.
 
+Finder Quick Look renders math and displays Mermaid blocks as source. Open the file in Aster to see the diagram.
+
 ### Xcode
 
 Enable **Aster for Xcode** under **System Settings → General → Login Items & Extensions → Xcode Source Editor**, then restart Xcode. Open a Markdown file and choose **Editor → Aster for Xcode → Preview Buffer in Aster**. The command opens the current text as a separate preview, including unsaved edits.
+
+## Appearance
+
+Aster and Finder Quick Look start in a dark pastel palette. In **Aster → Settings**, choose **Light** or **Follow macOS** to change the app appearance. Finder previews remain dark.
+
+The editor follows CommonMark syntax and supports GitHub Flavored Markdown features such as tables and task lists. Syntax colors target a 4.5:1 contrast ratio against the editing and reading backgrounds. [GitHub Flavored Markdown specification](https://github.github.com/gfm/) · [WCAG contrast minimum](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
 
 ## Keyboard shortcuts
 
@@ -54,6 +67,6 @@ Install Xcode 16 or later and Node.js 22 or later. From the repository root, run
 open .build/Xcode/Build/Products/Release/Aster.app
 ```
 
-The build installs the locked renderer dependencies, runs the tests, and creates a universal app bundle. Run `./test.sh` to repeat the tests after installing those dependencies.
+The build installs the locked renderer dependencies, runs the tests, and creates a universal app bundle. Run `./test.sh` to repeat the tests after installing those dependencies. Run `./scripts/package.sh .build/dist` after a successful build to create and verify the DMG, ZIP, and checksum file.
 
 Aster is available under the [MIT license](LICENSE). The app bundle includes notices for third-party packages.

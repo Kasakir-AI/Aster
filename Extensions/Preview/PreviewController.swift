@@ -38,7 +38,8 @@ final class PreviewController: QLPreviewProvider, QLPreviewingController {
         }
         let css = try String(contentsOf: cssURL, encoding: .utf8)
         let html = """
-        <!doctype html><html lang="en"><meta charset="utf-8">
+        <!doctype html><html lang="en" data-appearance="dark"><meta charset="utf-8">
+        <meta name="color-scheme" content="dark">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src cid:; base-uri 'none'; form-action 'none'">
         <style>\(css)</style><article>\(content)</article></html>

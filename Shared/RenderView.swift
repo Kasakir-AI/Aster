@@ -3,14 +3,14 @@ import WebKit
 
 struct RenderOptions: Equatable {
     var interactive = false
-    var appearance = "system"
+    var appearance = AsterAppearance.initial
     var fontSize = 16.0
     var diagrams = true
     var math = true
     var metadata = true
 
     func arguments(preserveScroll: Bool) -> [String: Any] {
-        ["interactive": interactive, "appearance": appearance, "fontSize": fontSize,
+        ["interactive": interactive, "appearance": appearance.rawValue, "fontSize": fontSize,
          "diagrams": diagrams, "math": math, "metadata": metadata, "preserveScroll": preserveScroll]
     }
 }
@@ -122,7 +122,7 @@ final class RenderView: NSViewController, WKNavigationDelegate, WKScriptMessageH
             imageLoader.image(at: url).map { "data:" + $0.mime + ";base64," + $0.data.base64EncodedString() }
         }
         return """
-        <!doctype html><html lang="en"><meta charset="utf-8">
+        <!doctype html><html lang="en" data-appearance="\(options.appearance.rawValue)"><meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
         <title>Markdown document</title><style>\(css)</style>\(embedded)</html>

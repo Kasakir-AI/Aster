@@ -6,6 +6,7 @@ struct SourceEditor: NSViewRepresentable {
     let model: Library
     let fontSize: Double
     let jump: Library.Jump?
+    @Environment(\.colorScheme) private var colorScheme
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -56,6 +57,7 @@ struct SourceEditor: NSViewRepresentable {
         editor.typewriter = model.typewriter
         editor.usesStyledSource = model.mode == .styled
         editor.setEditorFont(size: fontSize)
+        editor.setEditorAppearance(dark: colorScheme == .dark)
         if editor.string != note.text {
             let selection = editor.selectedRange()
             editor.string = note.text
@@ -110,16 +112,21 @@ final class SourceTextView: NSTextView {
     private var suppressScrollUntil = Date.distantPast
     private var highlighted: String?
     private var highlightTask: Task<Void, Never>?
-    private static let patterns: [(NSRegularExpression, NSColor)] = [
-        ("(?m)^ {0,3}#{1,6}(?:[ \\t].*)?$", .systemPurple),
-        ("(?m)^\\s*(?:[-+*]|[0-9]+[.)])\\s+(?:\\[[ xX]\\]\\s+)?", .systemIndigo),
-        ("(?m)^\\s*>.*$", .systemGray),
-        ("\\*\\*[^*\\n]+\\*\\*|__[^_\\n]+__|~~[^~\\n]+~~", .systemPurple),
-        ("\\]\\([^\\n)]*\\)", .systemBlue),
-        ("`[^`\\n]+`", .systemOrange),
-        ("(?ms)^ {0,3}(?:`{3,}|~{3,})[^\\n]*\\n.*?^ {0,3}(?:`{3,}|~{3,})[^\\n]*", .systemBrown)
-    ].compactMap { pattern, color in
-        (try? NSRegularExpression(pattern: pattern)).map { ($0, color) }
+    private var darkAppearance: Bool?
+    private var palette = AsterPalette.dark
+    private var parsedSource: String?
+    private var marks: [SourceMark] = []
+
+    func setEditorAppearance(dark: Bool) {
+        guard darkAppearance != dark else { return }
+        darkAppearance = dark
+        palette = dark ? .dark : .light
+        backgroundColor = palette.page
+        enclosingScrollView?.backgroundColor = palette.page
+        textColor = palette.ink
+        insertionPointColor = palette.ink
+        selectedTextAttributes = [.backgroundColor: palette.selection]
+        highlighted = nil
     }
 
     func setEditorFont(size: Double) {
@@ -140,24 +147,31 @@ final class SourceTextView: NSTextView {
     }
 
     private func applyHighlight() {
-        guard let layoutManager, let storage = textStorage, storage.length < 1_500_000 else { return }
+        guard let layoutManager, let storage = textStorage else { return }
         let source = string
         if highlighted == source && !focusMode && !usesStyledSource { return }
         highlighted = focusMode ? nil : source
         let range = NSRange(location: 0, length: storage.length)
         layoutManager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: range)
-        for (regex, color) in Self.patterns {
-            regex.enumerateMatches(in: source, range: range) { result, _, _ in
-                if let result { layoutManager.addTemporaryAttribute(.foregroundColor, value: color, forCharacterRange: result.range) }
-            }
+        guard storage.length < 1_500_000 else {
+            parsedSource = nil
+            marks = []
+            return
+        }
+        if parsedSource != source {
+            parsedSource = source
+            marks = SourceMark.parse(source)
+        }
+        for mark in marks {
+            layoutManager.addTemporaryAttribute(.foregroundColor, value: palette[keyPath: mark.color],
+                                                forCharacterRange: mark.range)
         }
         if usesStyledSource { styleSource(storage, source: source) }
         if focusMode {
             let paragraph = (source as NSString).paragraphRange(for: selectedRange())
-            let dim = NSColor.secondaryLabelColor.withAlphaComponent(0.55)
-            layoutManager.addTemporaryAttribute(.foregroundColor, value: dim,
+            layoutManager.addTemporaryAttribute(.foregroundColor, value: palette.muted,
                                                 forCharacterRange: NSRange(location: 0, length: paragraph.location))
-            layoutManager.addTemporaryAttribute(.foregroundColor, value: dim,
+            layoutManager.addTemporaryAttribute(.foregroundColor, value: palette.muted,
                                                 forCharacterRange: NSRange(location: NSMaxRange(paragraph), length: range.length - NSMaxRange(paragraph)))
         }
     }
@@ -177,7 +191,7 @@ final class SourceTextView: NSTextView {
             let row = text.substring(with: line)
             if let prefix = row.firstMatch(of: /^ {0,3}#{1,6} +/) {
                 let marker = NSRange(prefix.range, in: row)
-                layoutManager?.addTemporaryAttribute(.foregroundColor, value: NSColor.tertiaryLabelColor,
+                layoutManager?.addTemporaryAttribute(.foregroundColor, value: palette.muted,
                     forCharacterRange: NSRange(location: line.location + marker.location, length: marker.length))
             }
         }
@@ -246,5 +260,83 @@ final class SourceTextView: NSTextView {
         let item = NSMenuItem()
         item.tag = action.rawValue
         performTextFinderAction(item)
+    }
+}
+
+private struct SourceMark {
+    let range: NSRange
+    let color: KeyPath<AsterPalette, NSColor>
+
+    private static let frontMatter = /\A\u{FEFF}?---[ \t]*\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|\z)/
+    private static let listMarker = /^[ \t]*(?:>[ \t]*)*(?:[-+*]|[0-9]{1,9}[.)])(?=[ \t]|\r?$)(?:[ \t]+\[[ xX]\](?=[ \t]|\r?$))?/
+    private static let atxHeading = /^[ \t]*(?:>[ \t]*|(?:[-+*]|[0-9]{1,9}[.)])[ \t]+)*#{1,6}(?=[ \t]|\r?$)/
+    private static let headingUnderline = /^ {0,3}(?:=+|-+)[ \t]*$/
+
+    static func parse(_ source: String) -> [SourceMark] {
+        let front = source.prefixMatch(of: frontMatter)
+        let offset = front.map { NSRange($0.range, in: source).length } ?? 0
+        let body = front.map { String(source[$0.range.upperBound...]) } ?? source
+        let text = body as NSString
+        var blocks: [SourceMark] = []
+        var inline: [SourceMark] = []
+        if offset > 0 { blocks.append(Self(range: NSRange(location: 0, length: offset), color: \.muted)) }
+        guard let parsed = try? AttributedString(markdown: body, options: .init(appliesSourcePositionAttributes: true)) else {
+            return blocks
+        }
+        var coloredRows: Set<NSRange> = []
+        var listRows: Set<NSRange> = []
+        for run in parsed.runs {
+            guard let position = run.markdownSourcePosition,
+                  let region = Range(position, in: body) else { continue }
+            let range = NSRange(region, in: body)
+            guard range.length > 0 else { continue }
+            let components = run.presentationIntent?.components ?? []
+            if case .codeBlock = components.first?.kind {
+                blocks.append(Self(range: range.shifted(by: offset), color: \.code))
+                continue
+            }
+            let row = text.lineRange(for: NSRange(location: range.location, length: 0))
+            if coloredRows.insert(row).inserted {
+                if case .header = components.first?.kind {
+                    blocks.append(Self(range: row.shifted(by: offset), color: \.heading))
+                    if NSMaxRange(row) < text.length,
+                       text.substring(with: row).prefixMatch(of: atxHeading) == nil {
+                        let next = text.lineRange(for: NSRange(location: NSMaxRange(row), length: 0))
+                        if text.substring(with: next).trimmingCharacters(in: .newlines).wholeMatch(of: headingUnderline) != nil {
+                            blocks.append(Self(range: next.shifted(by: offset), color: \.heading))
+                        }
+                    }
+                } else if components.contains(where: { $0.kind == .blockQuote || $0.kind == .tableHeaderRow }) {
+                    blocks.append(Self(range: row.shifted(by: offset), color: \.quote))
+                }
+            }
+            if components.contains(where: { if case .listItem = $0.kind { true } else { false } }),
+               listRows.insert(row).inserted {
+                let line = text.substring(with: row)
+                if let match = line.prefixMatch(of: listMarker) {
+                    let marker = NSRange(match.range, in: line).shifted(by: row.location + offset)
+                    blocks.append(Self(range: marker, color: \.marker))
+                }
+            }
+            let intent = run.inlinePresentationIntent ?? []
+            let color: KeyPath<AsterPalette, NSColor>
+            if intent.contains(.code) {
+                color = \.code
+            } else if run.link != nil {
+                color = \.link
+            } else if !intent.intersection([.emphasized, .stronglyEmphasized, .strikethrough]).isEmpty {
+                color = \.emphasis
+            } else {
+                continue
+            }
+            inline.append(Self(range: range.shifted(by: offset), color: color))
+        }
+        return blocks + inline
+    }
+}
+
+private extension NSRange {
+    func shifted(by offset: Int) -> NSRange {
+        NSRange(location: location + offset, length: length)
     }
 }

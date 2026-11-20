@@ -18,17 +18,17 @@ final class ThumbnailProvider: QLThumbnailProvider {
             reply(QLThumbnailReply(contextSize: size, drawing: { context in
                 let scale = min(size.width, size.height) / 160
                 let bounds = CGRect(origin: .zero, size: size)
-                context.setFillColor(CGColor(red: 0.12, green: 0.10, blue: 0.14, alpha: 1))
+                let palette = AsterPalette.dark
+                context.setFillColor(palette.page.cgColor)
                 context.fill(bounds)
                 let inset = 15 * scale
                 let top = size.height - 26 * scale
-                let lilac = CGColor(red: 0.75, green: 0.63, blue: 0.83, alpha: 1)
-                Self.draw("✱", font: .systemFont(ofSize: 13 * scale, weight: .bold), color: lilac,
+                Self.draw("✱", font: .systemFont(ofSize: 13 * scale, weight: .bold), color: palette.heading,
                           in: CGRect(x: inset, y: top, width: size.width - inset * 2, height: 15 * scale), context: context)
                 Self.draw(String(title.prefix(90)), font: .systemFont(ofSize: 16 * scale, weight: .semibold),
-                          color: CGColor(gray: 0.96, alpha: 1),
+                          color: palette.ink,
                           in: CGRect(x: inset, y: top - 42 * scale, width: size.width - inset * 2, height: 38 * scale), context: context)
-                Self.draw(excerpt, font: .systemFont(ofSize: 8.5 * scale), color: lilac,
+                Self.draw(excerpt, font: .systemFont(ofSize: 8.5 * scale), color: palette.muted,
                           in: CGRect(x: inset, y: inset, width: size.width - inset * 2, height: max(0, top - 45 * scale - inset)), context: context)
                 return true
             }), nil)
@@ -52,11 +52,11 @@ final class ThumbnailProvider: QLThumbnailProvider {
         }
     }
 
-    private static func draw(_ string: String, font: NSFont, color: CGColor, in rect: CGRect, context: CGContext) {
+    private static func draw(_ string: String, font: NSFont, color: NSColor, in rect: CGRect, context: CGContext) {
         let text = (try? AttributedString(markdown: string, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
             .map { String($0.characters) } ?? string
         let attributed = NSAttributedString(string: text, attributes: [
-            .font: font, .foregroundColor: NSColor(cgColor: color) ?? .white
+            .font: font, .foregroundColor: color
         ])
         let setter = CTFramesetterCreateWithAttributedString(attributed)
         let frame = CTFramesetterCreateFrame(setter, CFRange(), CGPath(rect: rect, transform: nil), nil)

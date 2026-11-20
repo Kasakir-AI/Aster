@@ -4,15 +4,30 @@ import SwiftUI
 @main struct AsterApp: App {
     @NSApplicationDelegateAdaptor(AsterDelegate.self) private var delegate
     @Environment(\.openWindow) private var openWindow
+    @AppStorage("appearance") private var appearance = AsterAppearance.initial
 
     var body: some Scene {
         Window("Aster", id: "workspace") {
             WorkspaceView(model: delegate.library)
+                .preferredColorScheme(appearance.colorScheme)
                 .onAppear { delegate.showWindow = { openWindow(id: "workspace") } }
         }
         .defaultSize(width: 1080, height: 730)
         .commands { AsterCommands(model: delegate.library) }
-        Settings { AsterSettings() }
+        Settings {
+            AsterSettings(appearance: $appearance)
+                .preferredColorScheme(appearance.colorScheme)
+        }
+    }
+}
+
+private extension AsterAppearance {
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .dark: .dark
+        case .light: .light
+        case .system: nil
+        }
     }
 }
 
@@ -149,7 +164,7 @@ private struct AsterCommands: Commands {
 }
 
 private struct AsterSettings: View {
-    @AppStorage("appearance") private var appearance = "system"
+    @Binding var appearance: AsterAppearance
     @AppStorage("fontSize") private var fontSize = 16.0
     @AppStorage("restoreSession") private var restoreSession = true
     @AppStorage("autoSave") private var autoSave = false
@@ -165,7 +180,9 @@ private struct AsterSettings: View {
             }
             Section("Reading") {
                 Picker("Appearance", selection: $appearance) {
-                    Text("Follow macOS").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark")
+                    Text("Dark").tag(AsterAppearance.dark)
+                    Text("Light").tag(AsterAppearance.light)
+                    Text("Follow macOS").tag(AsterAppearance.system)
                 }
                 Stepper("Text size  \(Int(fontSize)) pt", value: $fontSize, in: 12...28)
                 Toggle("Render Mermaid diagrams", isOn: $mermaid)
@@ -174,6 +191,5 @@ private struct AsterSettings: View {
             }
         }
         .formStyle(.grouped).frame(width: 450, height: 360)
-        .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
     }
 }

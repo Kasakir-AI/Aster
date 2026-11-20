@@ -2,17 +2,18 @@ import SwiftUI
 import NaturalLanguage
 import WebKit
 
-private let lilac = Color(red: 0.72, green: 0.59, blue: 0.79)
-
 struct WorkspaceView: View {
     @Bindable var model: Library
-    @AppStorage("appearance") private var appearance = "system"
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage("fontSize") private var fontSize = 16.0
     @AppStorage("mermaid") private var mermaid = true
     @AppStorage("math") private var math = true
     @AppStorage("frontMatter") private var frontMatter = true
     @State private var previewQuery = ""
     @State private var dropping = false
+
+    private var palette: AsterPalette { colorScheme == .dark ? .dark : .light }
+    private var lilac: Color { Color(nsColor: palette.heading) }
 
     var body: some View {
         HSplitView {
@@ -32,9 +33,8 @@ struct WorkspaceView: View {
             }
         }
         .frame(minWidth: 690, minHeight: 425)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(Color(nsColor: palette.page))
         .tint(lilac)
-        .preferredColorScheme(appearance == "dark" ? .dark : appearance == "light" ? .light : nil)
         .navigationTitle(model.active?.title ?? "Aster")
         .toolbar {
             ToolbarItem(placement: .navigation) {
@@ -178,7 +178,7 @@ struct WorkspaceView: View {
     }
 
     @ViewBuilder private func content(_ note: Note) -> some View {
-        let options = RenderOptions(interactive: true, appearance: appearance, fontSize: fontSize,
+        let options = RenderOptions(interactive: true, appearance: colorScheme == .dark ? .dark : .light, fontSize: fontSize,
                                     diagrams: mermaid, math: math, metadata: frontMatter)
         switch model.mode {
         case .read:

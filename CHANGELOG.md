@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0
+
+- Start in a dark pastel theme in the app and Finder Quick Look. The app can still follow macOS or use Light mode.
+- Use coordinated, higher-contrast colors for Markdown syntax, links, and code.
+- Install from a drag-and-drop DMG or through the Homebrew tap. The ZIP is still available.
+
 ## 0.1.0
 
 - Added formatted Finder Quick Look previews and document thumbnails for Markdown files.
