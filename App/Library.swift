@@ -274,7 +274,7 @@ enum ReadingMode: String, CaseIterable, Identifiable {
             if active?.url == target, let fragment = address.split(separator: "#", maxSplits: 1).dropFirst().first {
                 let value = String(fragment).removingPercentEncoding ?? String(fragment)
                 if let heading = WorkspaceIndex.headings(in: active?.text ?? "").first(where: {
-                    $0.title.lowercased().replacingOccurrences(of: " ", with: "-") == value
+                    $0.anchor == value
                 }) { go(to: heading.line) }
             }
         } else if FileManager.default.fileExists(atPath: target.path) {

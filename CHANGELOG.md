@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- A link to a heading opens that heading, including when the heading contains punctuation or the same text appears twice.
+
 ## 0.2.0
 
 - Start in a dark pastel theme in the app and Finder Quick Look. The app can still follow macOS or use Light mode.

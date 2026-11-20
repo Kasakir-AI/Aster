@@ -28,6 +28,32 @@ import Foundation
         precondition(MarkdownFile.toggleTask(at: 9, in: markdown) == nil)
         precondition(MarkdownFile.toggleTask(at: 2, in: "🪻\r\n1. [X] Reviewed\r\n") == "🪻\r\n1. [ ] Reviewed\r\n")
         precondition(WorkspaceIndex.headings(in: markdown).map(\.line) == [4])
+        let repeated = "# Hello, World!\n\n# Hello, World!\n\n# !!!\n"
+        let anchors = WorkspaceIndex.headings(in: repeated).map(\.anchor)
+        precondition(anchors == ["hello-world", "hello-world-1", "heading"], anchors.joined(separator: ","))
+        let images = workspace.appendingPathComponent("Images", isDirectory: true)
+        let outsideDir = workspace.appendingPathComponent("Images-secret", isDirectory: true)
+        try FileManager.default.createDirectory(at: images, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outsideDir, withIntermediateDirectories: true)
+        let note = images.appendingPathComponent("Note.txt")
+        let inside = images.appendingPathComponent("inside.png")
+        let outside = outsideDir.appendingPathComponent("secret.png")
+        let bytes = Data([0x89, 0x50, 0x4e, 0x47])
+        try bytes.write(to: inside)
+        try bytes.write(to: outside)
+        try Data("note".utf8).write(to: note)
+        try FileManager.default.createSymbolicLink(at: images.appendingPathComponent("linked.png"), withDestinationURL: outside)
+        let allowed = CharacterSet.alphanumerics.union(.init(charactersIn: "-._~"))
+        func asset(_ reference: String) -> URL {
+            var components = URLComponents()
+            components.scheme = "aster-asset"
+            components.host = "image"
+            components.percentEncodedPath = "/" + reference.addingPercentEncoding(withAllowedCharacters: allowed)!
+            return components.url!
+        }
+        precondition(ImageAsset.read(asset("inside.png"), document: note, directory: images)?.data == bytes)
+        precondition(ImageAsset.read(asset("../Images-secret/secret.png"), document: note, directory: images) == nil)
+        precondition(ImageAsset.read(asset("linked.png"), document: note, directory: images) == nil)
         for encoding: MarkdownFile.Encoding in [.utf8, .utf8BOM, .utf16LE, .utf16BE] {
             let sample = "File encoding 🪻"
             let bytes = encoding.data(for: sample)!

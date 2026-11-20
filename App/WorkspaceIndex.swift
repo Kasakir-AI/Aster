@@ -5,6 +5,7 @@ struct Heading: Identifiable {
     let line: Int
     let level: Int
     let title: String
+    let anchor: String
 }
 
 struct SearchHit: Identifiable {
@@ -94,22 +95,52 @@ struct WorkspaceIndex {
 
     static func headings(in source: String) -> [Heading] {
         var output: [Heading] = []
+        var taken: Set<String> = []
         var previous: (Int, String)?
         for (line, row) in proseLines(source) {
             if let match = row.firstMatch(of: /^ {0,3}(#{1,6})[ \t]+(.+?) *#* *$/) {
-                output.append(Heading(line: line, level: match.1.count, title: plainTitle(String(match.2))))
+                output.append(heading(line: line, level: match.1.count, title: plainTitle(String(match.2)), taken: &taken))
                 previous = nil
             } else if let prior = previous, prior.0 + 1 == line,
                       let underline = row.firstMatch(of: /^ {0,3}(=+|-+)\s*$/), !prior.1.isEmpty,
                       !prior.1.hasPrefix("#"), !prior.1.hasPrefix(">") {
-                output.append(Heading(line: prior.0, level: underline.1.first == "=" ? 1 : 2,
-                                      title: plainTitle(prior.1)))
+                output.append(heading(line: prior.0, level: underline.1.first == "=" ? 1 : 2,
+                                      title: plainTitle(prior.1), taken: &taken))
                 previous = nil
             } else {
                 previous = (line, row.trimmingCharacters(in: .whitespaces))
             }
         }
         return output
+    }
+
+    private static func anchor(for title: String, taken: inout Set<String>) -> String {
+        let base = slug(title)
+        var anchor = base
+        var suffix = 1
+        while taken.contains(anchor) {
+            anchor = base + "-" + String(suffix)
+            suffix += 1
+        }
+        taken.insert(anchor)
+        return anchor
+    }
+
+    private static func heading(line: Int, level: Int, title: String, taken: inout Set<String>) -> Heading {
+        Heading(line: line, level: level, title: title, anchor: anchor(for: title, taken: &taken))
+    }
+
+    private static func slug(_ title: String) -> String {
+        let folded = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(with: nil)
+        var cleaned = ""
+        for character in folded {
+            if character.isLetter || character.isNumber || character == "_" || character == "-" {
+                cleaned.append(character)
+            } else if character.isWhitespace {
+                cleaned.append("-")
+            }
+        }
+        return cleaned.isEmpty ? "heading" : cleaned
     }
 
     private static func plainTitle(_ text: String) -> String {
@@ -158,7 +189,9 @@ struct WorkspaceIndex {
             }
             guard !words.isEmpty else { return [] }
             var sections = entry.headings.filter { $0.line <= lines.count }
-            if sections.first?.line != 1 { sections.insert(Heading(line: 1, level: 0, title: name), at: 0) }
+            if sections.first?.line != 1 {
+                sections.insert(Heading(line: 1, level: 0, title: name, anchor: Self.slug(name)), at: 0)
+            }
             return sections.enumerated().compactMap { index, heading -> SearchHit? in
                 let limit = index + 1 == sections.count ? lines.count : sections[index + 1].line - 1
                 let rows = lines[(heading.line - 1)..<limit]

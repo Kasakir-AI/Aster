@@ -13,6 +13,12 @@ test("renders tables, highlighting, task controls and duplicate heading anchors"
   assert.match(html, /<table>/);
   assert.match(html, /hljs-keyword/);
 });
+test("heading ids drop punctuation and number duplicates the way the editor does", () => {
+  const html = renderMarkdown("# Hello, World!\n\n# Hello, World!\n\n# !!!\n");
+  assert.match(html, /id="hello-world"/);
+  assert.match(html, /id="hello-world-1"/);
+  assert.match(html, /id="heading"/);
+});
 test("escapes HTML and blocks remote images by default", () => {
   const html = renderMarkdown('<script>alert(1)</script>\n\n![Tracking](https://example.com/pixel.jpg)\n\n[Bad](javascript:alert%281%29)');
   assert.doesNotMatch(html, /<script|<img|href="javascript:/);
