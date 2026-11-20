@@ -18,15 +18,34 @@ function loadDiagrams() {
   return diagrams;
 }
 
+function readingAnchor() {
+  const blocks = [...article.querySelectorAll("[data-line]")];
+  let chosen = null;
+  for (const block of blocks) {
+    if (block.getBoundingClientRect().top <= 8) chosen = block;
+    else break;
+  }
+  if (!chosen) return null;
+  return { line: chosen.dataset.line, top: chosen.getBoundingClientRect().top };
+}
+
+function restoreReading(anchor) {
+  if (!anchor) return;
+  const block = [...article.querySelectorAll("[data-line]")].find(item => item.dataset.line === anchor.line);
+  if (!block) return;
+  ignoreScrollUntil = performance.now() + 180;
+  window.scrollBy(0, block.getBoundingClientRect().top - anchor.top);
+}
+
 window.render = async (source, options) => {
   const current = ++revision;
-  const scrollTop = window.scrollY;
+  const anchor = options.preserveScroll ? readingAnchor() : null;
   const openMetadata = article.querySelector("details.metadata")?.open;
   document.documentElement.dataset.appearance = options.appearance;
   document.documentElement.style.fontSize = options.fontSize + "px";
   article.innerHTML = renderMarkdown(source, options);
   if (openMetadata && article.querySelector("details.metadata")) article.querySelector("details.metadata").open = true;
-  if (options.preserveScroll) window.scrollTo(0, scrollTop);
+  restoreReading(anchor);
   const blocks = [...article.querySelectorAll(".diagram")];
   if (!blocks.length) return;
   try {
@@ -50,6 +69,7 @@ window.render = async (source, options) => {
         block.title = "Mermaid could not render this diagram";
       }
     }
+    if (current === revision) restoreReading(anchor);
   } catch {
     // Keep Mermaid source readable if WebKit cannot load the bundled diagram engine.
   }
@@ -85,7 +105,16 @@ article.addEventListener("click", event => {
   const link = event.target.closest("a[href]");
   if (link) {
     const address = link.getAttribute("href");
-    if (!address.startsWith("#")) {
+    if (address.startsWith("#")) {
+      let name = address.slice(1);
+      try { name = decodeURIComponent(name); } catch { /* Keep the raw fragment when it is not percent-encoded. */ }
+      name = name.toLowerCase();
+      const target = [...article.querySelectorAll("[id]")].find(node => node.id.toLowerCase() === name);
+      if (!target) return;
+      event.preventDefault();
+      ignoreScrollUntil = performance.now() + 180;
+      target.scrollIntoView({ block: "start" });
+    } else {
       event.preventDefault();
       post("link", address);
     }

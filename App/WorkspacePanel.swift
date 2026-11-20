@@ -120,9 +120,10 @@ struct WorkspacePanel: View {
                 }
                 let visibleLinks = links.filter { !$0.broken && (focus == nil || $0.source == focus || $0.target == focus) }
                 let visibleNodes = focus.map { Set([$0] + visibleLinks.flatMap { [$0.source, $0.target] }).sorted(by: { $0.path < $1.path }) } ?? nodes
-                Graph(nodes: Array(visibleNodes.prefix(32)), links: visibleLinks, center: focus) { open($0) }
+                let shown = WorkspaceIndex.visibleGraphNodes(focus: focus, nodes: visibleNodes)
+                Graph(nodes: shown, links: visibleLinks, center: focus) { open($0) }
                     .frame(minHeight: 235)
-                if visibleNodes.count > 32 {
+                if visibleNodes.count > shown.count {
                     Text("Showing 32 documents. Choose a file to see its connections.").font(.caption).foregroundStyle(.secondary)
                 }
                 Divider()

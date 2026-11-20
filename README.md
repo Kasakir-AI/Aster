@@ -12,7 +12,7 @@ Aster is a native macOS editor and reader for Markdown. Open a single file or wo
 - Edit with native find and replace, formatting shortcuts, focus mode, and typewriter mode.
 - Print a preview or export it as HTML or PDF.
 
-Aster works with plain Markdown files on disk. It displays local images from the document folder or the open workspace. It leaves remote images unloaded.
+Aster works with plain Markdown files on disk. It displays local images from the document folder or the open workspace. It leaves remote images unloaded. The first time Aster opens, it asks whether Finder should open Markdown files in Aster. Choose **Not Now** to keep your current app. You can choose Aster later in **Aster → Settings**.
 
 ## Install
 
@@ -34,11 +34,11 @@ The app is ad hoc signed and unnotarized. If macOS blocks the download, build an
 
 In Finder, select a Markdown file and press Space. If Finder shows raw text, look for **Aster Markdown Preview** under **System Settings → General → Login Items & Extensions → Quick Look**. Check for another enabled Markdown preview provider if Finder still shows a different preview.
 
-Finder Quick Look renders math and displays Mermaid blocks as source. Open the file in Aster to see the diagram.
+Finder Quick Look renders math and images stored in the same folder as the note. Mermaid blocks stay as source. Open the file in Aster to see the diagram.
 
 ### Xcode
 
-Enable **Aster for Xcode** under **System Settings → General → Login Items & Extensions → Xcode Source Editor**, then restart Xcode. Open a Markdown file and choose **Editor → Aster for Xcode → Preview Buffer in Aster**. The command opens the current text as a separate preview, including unsaved edits.
+Enable **Aster for Xcode** under **System Settings → General → Login Items & Extensions → Xcode Source Editor**, then restart Xcode. Open a Markdown file and choose **Editor → Aster for Xcode → Preview Buffer in Aster**. The command opens the current text in one preview, including unsaved edits. Aster reuses that preview. The view mode saved for the next launch stays as it was.
 
 ## Appearance
 
@@ -70,5 +70,9 @@ open .build/Xcode/Build/Products/Release/Aster.app
 ```
 
 The build installs the locked renderer dependencies, runs the tests, and creates a universal app bundle. Run `./test.sh` to repeat the tests after installing those dependencies. Run `./scripts/package.sh .build/dist` after a successful build to create and verify the DMG, ZIP, and checksum file.
+
+## Contributing
+
+Report a bug or send a change on [GitHub](https://github.com/Kasakir-AI/Aster/issues). Include the Aster version and the macOS version with a bug report. Planned work is listed in the [roadmap](ROADMAP.md).
 
 Aster is available under the [MIT license](LICENSE). The app bundle includes notices for third-party packages.

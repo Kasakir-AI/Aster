@@ -20,6 +20,10 @@ import Foundation
         ```swift
         # This is not a heading
         ```
+
+        [water]: <Guides/Café Notes.md>
+
+            [Phantom](Phantom.md)
         """
         try markdown.write(to: landing, atomically: true, encoding: .utf8)
         try "# River\n\nFresh water observations.".write(to: water, atomically: true, encoding: .utf8)
@@ -31,6 +35,10 @@ import Foundation
         let repeated = "# Hello, World!\n\n# Hello, World!\n\n# !!!\n"
         let anchors = WorkspaceIndex.headings(in: repeated).map(\.anchor)
         precondition(anchors == ["hello-world", "hello-world-1", "heading"], anchors.joined(separator: ","))
+        precondition(WorkspaceIndex.heading(matching: "Getting-started", in: markdown)?.line == 4)
+        let files = (1...40).map { URL(fileURLWithPath: String(format: "/notes/%02d.md", $0)) }
+        let shown = WorkspaceIndex.visibleGraphNodes(focus: files[39], nodes: files)
+        precondition(shown.first == files[39] && shown.count == 32 && !shown.dropFirst().contains(files[39]))
         let images = workspace.appendingPathComponent("Images", isDirectory: true)
         let outsideDir = workspace.appendingPathComponent("Images-secret", isDirectory: true)
         try FileManager.default.createDirectory(at: images, withIntermediateDirectories: true)
@@ -67,6 +75,8 @@ import Foundation
         precondition(index.tree.count == 2 && index.entries.count == 2)
         precondition(index.links.contains { $0.target == water && !$0.broken })
         precondition(index.links.filter(\.broken).map(\.target.lastPathComponent) == ["Missing.md"])
+        precondition(index.links.filter { $0.target == water && !$0.broken }.count == 2)
+        precondition(!index.links.contains { $0.address.contains("Phantom") })
         let results = try index.search("cafe observations", mode: .sections)
         precondition(results.first?.url == water && results.first?.line == 1)
         let regex = try index.search("FRESH.*water", mode: .regex)

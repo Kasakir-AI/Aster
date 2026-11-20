@@ -61,6 +61,7 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     weak var editor: SourceTextView?
     weak var renderer: RenderView?
     private var indexTask: Task<Void, Never>?
+    private var pendingIndex: Task<Void, Never>?
     private var pendingSaves: [UUID: Task<Void, Never>] = [:]
 
     struct Jump: Equatable { let id = UUID(); let line: Int }
@@ -271,11 +272,9 @@ enum ReadingMode: String, CaseIterable, Identifiable {
         guard let source = active?.url, let target = MarkdownFile.localURL(address, relativeTo: source) else { return }
         if MarkdownFile.isMarkdown(target) {
             open(target)
-            if active?.url == target, let fragment = address.split(separator: "#", maxSplits: 1).dropFirst().first {
-                let value = String(fragment).removingPercentEncoding ?? String(fragment)
-                if let heading = WorkspaceIndex.headings(in: active?.text ?? "").first(where: {
-                    $0.anchor == value
-                }) { go(to: heading.line) }
+            if active?.url == target, let fragment = address.split(separator: "#", maxSplits: 1).dropFirst().first,
+               let heading = WorkspaceIndex.heading(matching: String(fragment), in: active?.text ?? "") {
+                go(to: heading.line)
             }
         } else if FileManager.default.fileExists(atPath: target.path) {
             NSWorkspace.shared.activateFileViewerSelecting([target])
@@ -293,6 +292,7 @@ enum ReadingMode: String, CaseIterable, Identifiable {
 
     func edit(_ note: Note, text: String) {
         note.text = text
+        scheduleIndexRefresh()
         pendingSaves.removeValue(forKey: note.id)?.cancel()
         guard UserDefaults.standard.bool(forKey: "autoSave"), note.url != nil, note.dirty else { return }
         pendingSaves[note.id] = Task { [weak self, weak note] in
@@ -327,11 +327,33 @@ enum ReadingMode: String, CaseIterable, Identifiable {
         defaults.set(active?.url?.path, forKey: "selectedDocument")
     }
 
+    private func scheduleIndexRefresh() {
+        pendingIndex?.cancel()
+        pendingIndex = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, let self else { return }
+            refreshIndex()
+        }
+    }
+
     private func receiveXcode(_ url: URL) {
         guard let source = PreviewTransfer.source(from: url) else { return }
-        let note = Note(text: source, title: "Xcode Preview")
-        notes.append(note)
-        selection = note.id
-        mode = .read
+        if let note = notes.first(where: { $0.url == nil && $0.titleOverride == "Xcode Preview" }) {
+            note.text = source
+            note.saved = source
+            note.conflict = false
+            selection = note.id
+        } else {
+            let note = Note(text: source, title: "Xcode Preview")
+            notes.append(note)
+            selection = note.id
+        }
+        let remembered = UserDefaults.standard.object(forKey: "viewMode")
+        if mode == .source || mode == .styled { mode = .read }
+        if let remembered {
+            UserDefaults.standard.set(remembered, forKey: "viewMode")
+        } else {
+            UserDefaults.standard.removeObject(forKey: "viewMode")
+        }
     }
 }

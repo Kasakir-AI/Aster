@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main struct AsterApp: App {
     @NSApplicationDelegateAdaptor(AsterDelegate.self) private var delegate
@@ -44,6 +45,7 @@ private extension AsterAppearance {
             open(pending)
             pending.removeAll()
         }
+        MarkdownDefault.askIfNeeded()
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -163,6 +165,68 @@ private struct AsterCommands: Commands {
     }
 }
 
+enum MarkdownDefault {
+    private static let askedKey = "didAskMarkdownDefault"
+
+    static var contentTypes: [UTType] {
+        var seen: Set<String> = []
+        var types: [UTType] = []
+        func add(_ type: UTType?) {
+            guard let type, seen.insert(type.identifier).inserted else { return }
+            types.append(type)
+        }
+        for identifier in ["net.daringfireball.markdown", "public.markdown", "com.unknown.md", "org.commonmark.markdown"] {
+            add(UTType(identifier))
+        }
+        for ext in MarkdownFile.extensions { add(UTType(filenameExtension: ext)) }
+        return types
+    }
+
+    static func isDefault(app: URL = Bundle.main.bundleURL) -> Bool {
+        let target = app.resolvingSymlinksInPath().standardizedFileURL
+        let probes = [UTType(filenameExtension: "md"), UTType("public.markdown"), UTType("net.daringfireball.markdown")].compactMap { $0 }
+        guard !probes.isEmpty else { return false }
+        return probes.allSatisfy { type in
+            NSWorkspace.shared.urlForApplication(toOpen: type)?.resolvingSymlinksInPath().standardizedFileURL == target
+        }
+    }
+
+    static func makeDefault(app: URL = Bundle.main.bundleURL, completion: @escaping (Error?) -> Void) {
+        let types = contentTypes
+        guard !types.isEmpty else { completion(nil); return }
+        var remaining = types.count
+        var failure: Error?
+        for type in types {
+            NSWorkspace.shared.setDefaultApplication(at: app, toOpen: type) { error in
+                DispatchQueue.main.async {
+                    if failure == nil { failure = error }
+                    remaining -= 1
+                    if remaining == 0 { completion(failure) }
+                }
+            }
+        }
+    }
+
+    static func askIfNeeded() {
+        if isDefault() {
+            UserDefaults.standard.set(true, forKey: askedKey)
+            return
+        }
+        guard !UserDefaults.standard.bool(forKey: askedKey) else { return }
+        let alert = NSAlert()
+        alert.messageText = "Use Aster for Markdown files?"
+        alert.informativeText = "Finder can open .md files in Aster when you double-click them. You can change this later in Aster Settings."
+        alert.addButton(withTitle: "Use Aster")
+        alert.addButton(withTitle: "Not Now")
+        let useAster = alert.runModal() == .alertFirstButtonReturn
+        UserDefaults.standard.set(true, forKey: askedKey)
+        guard useAster else { return }
+        makeDefault { error in
+            if let error { NSAlert(error: error).runModal() }
+        }
+    }
+}
+
 private struct AsterSettings: View {
     @Binding var appearance: AsterAppearance
     @AppStorage("fontSize") private var fontSize = 16.0
@@ -171,12 +235,25 @@ private struct AsterSettings: View {
     @AppStorage("mermaid") private var mermaid = true
     @AppStorage("math") private var math = true
     @AppStorage("frontMatter") private var frontMatter = true
+    @State private var markdownDefault = MarkdownDefault.isDefault()
+    @State private var defaultError: String?
 
     var body: some View {
         Form {
             Section("Workspace") {
                 Toggle("Reopen documents and workspace on launch", isOn: $restoreSession)
                 Toggle("Automatically save changes", isOn: $autoSave)
+                if markdownDefault {
+                    Text("Aster opens Markdown files from Finder.")
+                } else {
+                    Button("Make Aster the default for Markdown") {
+                        MarkdownDefault.makeDefault { error in
+                            defaultError = error?.localizedDescription
+                            markdownDefault = error == nil
+                        }
+                    }
+                    if let defaultError { Text(defaultError).foregroundStyle(.red) }
+                }
             }
             Section("Reading") {
                 Picker("Appearance", selection: $appearance) {
@@ -190,6 +267,6 @@ private struct AsterSettings: View {
                 Toggle("Show YAML front matter", isOn: $frontMatter)
             }
         }
-        .formStyle(.grouped).frame(width: 450, height: 360)
+        .formStyle(.grouped).frame(width: 450, height: 430)
     }
 }

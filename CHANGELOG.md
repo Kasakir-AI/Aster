@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2
+
+- A heading link opens that heading when the link uses different capital letters.
+- The preview stays on the paragraph you were reading when Aster draws a Mermaid diagram above it.
+- The link map includes reference links and paths with spaces. It ignores links written in indented code.
+- Backlinks update while you type.
+- Preview Buffer in Aster reuses one preview. The view mode saved for the next launch stays as it was.
+- Finder Quick Look shows images stored in the same folder as the note.
+- The link map keeps the selected file on the graph.
+- The first launch asks whether Finder should open Markdown files in Aster. You can choose this later in Settings.
+
 ## 0.2.1
 
 - A link to a heading opens that heading, including when the heading contains punctuation or the same text appears twice.

@@ -268,8 +268,8 @@
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"SWIFT_ENABLE_BARE_SLASH_REGEX" = "YES";
 				"COPY_PHASE_STRIP" = "NO";
-				"MARKETING_VERSION" = "0.2.1";
-				"CURRENT_PROJECT_VERSION" = "3";
+				"MARKETING_VERSION" = "0.2.2";
+				"CURRENT_PROJECT_VERSION" = "4";
 				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "DEBUG";
 			};
 		};
@@ -286,8 +286,8 @@
 				"ENABLE_HARDENED_RUNTIME" = "YES";
 				"SWIFT_ENABLE_BARE_SLASH_REGEX" = "YES";
 				"COPY_PHASE_STRIP" = "NO";
-				"MARKETING_VERSION" = "0.2.1";
-				"CURRENT_PROJECT_VERSION" = "3";
+				"MARKETING_VERSION" = "0.2.2";
+				"CURRENT_PROJECT_VERSION" = "4";
 			};
 		};
 		"000000000000000000000022" = {
@@ -491,13 +491,13 @@
 				"PRODUCT_NAME" = "AsterPreview";
 				"INFOPLIST_FILE" = "Config/Preview.plist";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "io.github.kasakir-ai.aster.preview";
+				"CODE_SIGN_ENTITLEMENTS" = "Config/Preview.entitlements";
 				"LD_RUNPATH_SEARCH_PATHS" = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
 				"SKIP_INSTALL" = "YES";
-				"CODE_SIGN_ENTITLEMENTS" = "Config/Extension.entitlements";
 				"APPLICATION_EXTENSION_API_ONLY" = "YES";
 				"SWIFT_ACTIVE_COMPILATION_CONDITIONS" = "DEBUG";
 			};
@@ -509,13 +509,13 @@
 				"PRODUCT_NAME" = "AsterPreview";
 				"INFOPLIST_FILE" = "Config/Preview.plist";
 				"PRODUCT_BUNDLE_IDENTIFIER" = "io.github.kasakir-ai.aster.preview";
+				"CODE_SIGN_ENTITLEMENTS" = "Config/Preview.entitlements";
 				"LD_RUNPATH_SEARCH_PATHS" = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
 				"SKIP_INSTALL" = "YES";
-				"CODE_SIGN_ENTITLEMENTS" = "Config/Extension.entitlements";
 				"APPLICATION_EXTENSION_API_ONLY" = "YES";
 			};
 		};

@@ -66,9 +66,7 @@ struct WorkspaceIndex {
         entries.sort { $0.url.path.localizedStandardCompare($1.url.path) == .orderedAscending }
         let addresses = Set(entries.map(\.url))
         let links = entries.flatMap { entry in
-            let matches = proseLines(entry.source).flatMap { _, row in
-                row.matches(of: /(?:^|[^!])\]\(<?([^\s)>]+)>?(?:\s+"[^"]*")?\)/).map { String($0.1) }
-            }
+            let matches = proseLines(entry.source).flatMap { _, row in linkAddresses(on: row) }
             return matches.enumerated().compactMap { ordinal, address -> DocumentLink? in
                 guard let target = MarkdownFile.localURL(address, relativeTo: entry.url), MarkdownFile.isMarkdown(target) else { return nil }
                 return DocumentLink(source: entry.url, target: target, address: address,
@@ -91,6 +89,16 @@ struct WorkspaceIndex {
                 .append(FileNode(url: folder, children: sorted(children[folder] ?? [])))
         }
         return Self(entries: entries, links: links, tree: sorted(children[root] ?? []))
+    }
+
+    static func heading(matching fragment: String, in source: String) -> Heading? {
+        let value = (fragment.removingPercentEncoding ?? fragment).lowercased(with: nil)
+        return headings(in: source).first { $0.anchor == value }
+    }
+
+    static func visibleGraphNodes(focus: URL?, nodes: [URL], limit: Int = 32) -> [URL] {
+        guard let focus else { return Array(nodes.prefix(limit)) }
+        return Array(([focus] + nodes.filter { $0 != focus }).prefix(limit))
     }
 
     static func headings(in source: String) -> [Heading] {
@@ -146,6 +154,32 @@ struct WorkspaceIndex {
     private static func plainTitle(_ text: String) -> String {
         (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnly)))
             .map { String($0.characters) } ?? text
+    }
+
+    static func linkAddresses(on row: String) -> [String] {
+        guard !isIndentedCode(row) else { return [] }
+        var found: [String] = []
+        for match in row.matches(of: /(?:^|[^!])\]\((?:<([^>\n]+)>|([^)\s]+))/) {
+            if let bracketed = match.output.1 { found.append(String(bracketed)) }
+            else if let plain = match.output.2 { found.append(String(plain)) }
+        }
+        if let reference = row.firstMatch(of: /^ {0,3}\[[^\]\n]+\]:[ \t]+(?:<([^>\n]+)>|(\S+))/) {
+            if let bracketed = reference.output.1 { found.append(String(bracketed)) }
+            else if let plain = reference.output.2 { found.append(String(plain)) }
+        }
+        return found
+    }
+
+    private static func isIndentedCode(_ row: String) -> Bool {
+        var width = 0
+        var index = row.startIndex
+        while index < row.endIndex, row[index] == " " || row[index] == "\t" {
+            width += row[index] == "\t" ? 4 : 1
+            index = row.index(after: index)
+        }
+        guard width >= 4, index < row.endIndex else { return false }
+        let rest = row[index...]
+        return rest.firstMatch(of: /^(?:[-+*]|\d+[.)])[ \t]/) == nil
     }
 
     static func proseLines(_ source: String) -> [(Int, String)] {
