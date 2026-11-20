@@ -24,6 +24,8 @@ You can also install Aster with Homebrew.
 brew install --cask kasakir-ai/tap/aster
 ```
 
+If Homebrew reports that the cask is untrusted, run `brew trust --cask kasakir-ai/tap/aster` once, then retry the install.
+
 Run `brew update` and `brew upgrade --cask kasakir-ai/tap/aster` to update.
 
 The app is ad hoc signed and unnotarized. If macOS blocks the download, build and run Aster locally using the instructions below.
