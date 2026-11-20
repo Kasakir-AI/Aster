@@ -38,8 +38,7 @@ import AppKit
 
         > actually a quote
         """
-        editor.highlight()
-        try await Task.sleep(for: .milliseconds(140))
+        editor.highlightNow()
         let source = editor.string as NSString
         func foreground(_ text: String) -> NSColor? {
             let index = source.range(of: text).location
@@ -49,7 +48,9 @@ import AppKit
         }
 
         precondition(editor.backgroundColor == AsterPalette.dark.page)
-        precondition(foreground("Setext heading") == AsterPalette.dark.heading, "Setext headings should be highlighted")
+        let setext = foreground("Setext heading")
+        precondition(setext == AsterPalette.dark.heading,
+                     "Setext headings should be highlighted (saw \(setext?.description ?? "none"))")
         precondition(foreground("======") == AsterPalette.dark.heading, "A Setext underline belongs to its heading")
         precondition(foreground("---") != AsterPalette.dark.heading, "A thematic break cannot underline an ATX heading")
         precondition(foreground("café") == AsterPalette.dark.emphasis, "Highlighting should follow Unicode source positions")
@@ -62,8 +63,7 @@ import AppKit
         precondition(foreground("actually a quote") == AsterPalette.dark.quote,
                      "Quoting must resume after a fence closes")
         editor.setEditorAppearance(dark: false)
-        editor.highlight()
-        try await Task.sleep(for: .milliseconds(140))
+        editor.highlightNow()
         precondition(editor.backgroundColor == AsterPalette.light.page)
         precondition(foreground("café") == AsterPalette.light.emphasis,
                      "Switching appearance must refresh existing highlights")

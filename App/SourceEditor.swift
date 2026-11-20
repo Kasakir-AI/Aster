@@ -146,6 +146,11 @@ final class SourceTextView: NSTextView {
         }
     }
 
+    func highlightNow() {
+        highlightTask?.cancel()
+        applyHighlight()
+    }
+
     private func applyHighlight() {
         guard let layoutManager, let storage = textStorage else { return }
         let source = string
