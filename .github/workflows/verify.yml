@@ -31,9 +31,9 @@ jobs:
       - name: Check project files
         run: |
           git diff-tree --root -r --check HEAD
-          for script in build.sh test.sh scripts/package.sh; do bash -n "$script"; done
+          for script in build.sh test.sh scripts/package.sh scripts/macos-notary.sh; do bash -n "$script"; done
           for plist in Config/*; do plutil -lint "$plist"; done
       - name: Build and run tests
         run: ./build.sh
       - name: Verify release archives
-        run: ./scripts/package.sh "$RUNNER_TEMP/aster-dist"
+        run: ./scripts/package.sh --check "$RUNNER_TEMP/aster-dist"

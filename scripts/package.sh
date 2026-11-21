@@ -1,13 +1,21 @@
 #!/bin/bash
 set -euo pipefail
 
+check_only=false
+if [[ ${1:-} == --check ]]; then
+    check_only=true
+    shift
+fi
 if [[ $# != 1 ]]; then
-    echo "Usage: $0 OUTPUT_DIRECTORY" >&2
+    echo "Usage: $0 [--check] OUTPUT_DIRECTORY" >&2
     exit 2
 fi
 mkdir -p "$1"
 output=$(cd "$1" && pwd)
 cd "$(dirname "$0")/.."
+if ! "$check_only"; then
+    source scripts/macos-notary.sh
+fi
 app="$PWD/.build/Xcode/Build/Products/Release/Aster.app"
 version=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app/Contents/Info.plist")
 if [[ ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -35,26 +43,43 @@ cleanup() {
 }
 trap cleanup EXIT
 mkdir "$scratch/stage" "$scratch/mount"
-ditto "$app" "$scratch/stage/Aster.app"
+staged_app="$scratch/stage/Aster.app"
+ditto "$app" "$staged_app"
+if ! "$check_only"; then
+    for extension in "$staged_app"/Contents/PlugIns/*.appex; do
+        codesign --force --options runtime --timestamp --preserve-metadata=entitlements \
+            --sign "$MACOS_SIGN_IDENTITY" "$extension"
+    done
+    codesign --force --options runtime --timestamp --preserve-metadata=entitlements \
+        --sign "$MACOS_SIGN_IDENTITY" "$staged_app"
+    notarize_app "$staged_app" "$scratch/notary.zip"
+fi
 ln -s /Applications "$scratch/stage/Applications"
 
 dmg="Aster-$version.dmg"
 zip="Aster-$version-macOS.zip"
 hdiutil create -quiet -srcfolder "$scratch/stage" -volname Aster -fs HFS+ -format UDZO "$scratch/$dmg"
+if ! "$check_only"; then
+    notarize_dmg "$scratch/$dmg"
+fi
 hdiutil verify -quiet "$scratch/$dmg"
 hdiutil attach -quiet -readonly -nobrowse -mountpoint "$scratch/mount" "$scratch/$dmg"
 mounted=true
 test "$(readlink "$scratch/mount/Applications")" = /Applications
 verify_app "$scratch/mount/Aster.app"
-diff -qr "$app" "$scratch/mount/Aster.app"
+diff -qr "$staged_app" "$scratch/mount/Aster.app"
 hdiutil detach -quiet "$scratch/mount"
 mounted=false
 
-ditto -c -k --sequesterRsrc --keepParent "$app" "$scratch/$zip"
+ditto -c -k --sequesterRsrc --keepParent "$staged_app" "$scratch/$zip"
 unzip -tq "$scratch/$zip"
 mkdir "$scratch/unzipped"
 ditto -x -k "$scratch/$zip" "$scratch/unzipped"
 verify_app "$scratch/unzipped/Aster.app"
-diff -qr "$app" "$scratch/unzipped/Aster.app"
+diff -qr "$staged_app" "$scratch/unzipped/Aster.app"
+if ! "$check_only"; then
+    verify_signature "$scratch/unzipped/Aster.app"
+    xcrun stapler validate "$scratch/unzipped/Aster.app"
+fi
 (cd "$scratch" && shasum -a 256 "$dmg" "$zip" > SHA256SUMS && shasum -a 256 -c SHA256SUMS)
 mv "$scratch/$dmg" "$scratch/$zip" "$scratch/SHA256SUMS" "$output/"

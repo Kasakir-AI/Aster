@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Aster’s macOS downloads are signed with Developer ID and notarized by Apple.
+
 ## 1.0.0
 
 - The editor runs in the sandbox and remembers folders and files you open. Images stored next to a note still appear.
