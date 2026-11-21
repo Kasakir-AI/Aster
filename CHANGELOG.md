@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2
+
+- The disk image now includes Apple’s notarization ticket on the Aster app as well as the disk image. This keeps Finder Quick Look working after installation from the disk image.
+
 ## 1.0.1
 
 - Aster’s macOS downloads are signed with Developer ID and notarized by Apple.
