@@ -17,7 +17,7 @@ enum ImageAsset {
 
     static func replacingSources(in html: String, with replacement: (URL) -> String?) -> String {
         var output = html
-        for match in html.matches(of: /src="(aster-asset:\/\/image\/[^"]+)"/).reversed() {
+        for match in html.matches(of: /<img(?:\s+[^\s=<>]+="[^"]*")*?\s+src="(aster-asset:\/\/image\/[^"]+)"/).reversed() {
             guard let url = URL(string: String(match.1)), let newSource = replacement(url) else { continue }
             let position = NSRange(match.1.startIndex..<match.1.endIndex, in: html)
             guard let range = Range(position, in: output) else { continue }

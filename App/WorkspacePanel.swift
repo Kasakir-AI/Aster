@@ -101,11 +101,11 @@ struct WorkspacePanel: View {
     }
 
     private var linkMap: some View {
-        let links = model.index.links
+        let links = model.index.links.filter { model.canFollowLocalLink($0.target, from: $0.source) }
         let broken = links.filter(\.broken)
         let connected = Set(links.flatMap { $0.broken ? [$0.source] : [$0.source, $0.target] })
         let nodes = connected.sorted(by: { $0.path < $1.path })
-        let focus = graphSelection
+        let focus = graphSelection.flatMap { connected.contains($0) ? $0 : nil }
         return VStack(alignment: .leading, spacing: 8) {
             if nodes.isEmpty {
                 ContentUnavailableView("No document links", systemImage: "point.3.connected.trianglepath.dotted")
@@ -116,13 +116,15 @@ struct WorkspacePanel: View {
                         ForEach(nodes, id: \.self) { url in Text(path(url)).tag(Optional(url)) }
                     }.frame(maxWidth: 440)
                     Spacer()
-                    Text("\(links.count) links").foregroundStyle(.secondary)
+                    Text("\(links.count) \(links.count == 1 ? "link" : "links")").foregroundStyle(.secondary)
                 }
                 let visibleLinks = links.filter { !$0.broken && (focus == nil || $0.source == focus || $0.target == focus) }
                 let visibleNodes = focus.map { Set([$0] + visibleLinks.flatMap { [$0.source, $0.target] }).sorted(by: { $0.path < $1.path }) } ?? nodes
                 let shown = WorkspaceIndex.visibleGraphNodes(focus: focus, nodes: visibleNodes)
-                Graph(nodes: shown, links: visibleLinks, center: focus) { open($0) }
-                    .frame(minHeight: 235)
+                Graph(nodes: shown, links: visibleLinks, center: focus) { url in
+                    guard let root = model.root, model.canFollowLocalLink(url, from: root) else { return }
+                    open(url)
+                }.frame(minHeight: 235)
                 if visibleNodes.count > shown.count {
                     Text("Showing 32 documents. Choose a file to see its connections.").font(.caption).foregroundStyle(.secondary)
                 }

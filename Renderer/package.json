@@ -13,6 +13,15 @@
     "mermaid": "12.3.0"
   },
   "devDependencies": {
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "mermaid-notice-chevrotain-allstar": "npm:chevrotain-allstar@0.5.0",
+    "mermaid-notice-fastdom": "npm:fastdom@1.0.12",
+    "mermaid-notice-js-yaml": "npm:js-yaml@4.3.2",
+    "mermaid-notice-langium": "npm:langium@4.4.0",
+    "mermaid-notice-path-browserify": "npm:path-browserify@1.0.1",
+    "mermaid-notice-vscode-jsonrpc": "npm:vscode-jsonrpc@9.0.3",
+    "mermaid-notice-vscode-languageserver-protocol": "npm:vscode-languageserver-protocol@3.18.4",
+    "mermaid-notice-vscode-languageserver-textdocument": "npm:vscode-languageserver-textdocument@1.0.15",
+    "mermaid-notice-vscode-languageserver-types": "npm:vscode-languageserver-types@3.18.4"
   }
 }

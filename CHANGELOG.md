@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- HTML, PDF, and print output reflect the selected draft, including unsaved edits.
+- If a file changes again before you replace it, Aster asks you to review the new change.
+- Aster can reopen a workspace after you rename its folder.
+- The Link Map follows the workspace-only link setting.
+- The Mac App Store build uses App Store updates. Aster Settings links to the privacy policy.
+
 ## 1.0.2
 
 - The disk image now includes Apple’s notarization ticket on the Aster app as well as the disk image. This keeps Finder Quick Look working after installation from the disk image.

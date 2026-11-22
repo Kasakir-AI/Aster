@@ -32,7 +32,7 @@ jobs:
         run: |
           git diff-tree --root -r --check HEAD
           for script in build.sh test.sh scripts/package.sh scripts/macos-notary.sh; do bash -n "$script"; done
-          for plist in Config/*; do plutil -lint "$plist"; done
+          for plist in Config/*.plist Config/*.entitlements Config/*.xcprivacy; do plutil -lint "$plist"; done
       - name: Build and run tests
         run: ./build.sh
       - name: Verify release archives

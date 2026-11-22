@@ -104,7 +104,7 @@ private struct AsterCommands: Commands {
                 .disabled(model.active == nil || model.mode == .source || model.mode == .styled)
         }
         CommandGroup(replacing: .printItem) {
-            Button("Print…") { model.renderer?.printDocument() }.keyboardShortcut("p")
+            Button("Print…") { printDocument() }.keyboardShortcut("p")
                 .disabled(model.active == nil || model.mode == .source || model.mode == .styled)
         }
         CommandGroup(after: .textEditing) {
@@ -153,7 +153,8 @@ private struct AsterCommands: Commands {
     }
 
     private func export(pdf: Bool) {
-        guard let note = model.active, let renderer = model.renderer else { return }
+        guard let note = model.active else { return }
+        let (snapshot, size) = exportSnapshot(for: note)
         let panel = NSSavePanel()
         panel.allowedContentTypes = pdf ? [.pdf] : [.html]
         let name = note.url?.deletingPathExtension().lastPathComponent ?? "Untitled"
@@ -162,16 +163,39 @@ private struct AsterCommands: Commands {
         Task { @MainActor in
             do {
                 if pdf {
-                    let data = try await renderer.makePDF()
+                    let data = try await RenderView.makePDF(of: snapshot, size: size)
                     try data.write(to: destination, options: .atomic)
                 } else {
-                    let html = try await renderer.html()
+                    let html = try await RenderView.html(of: snapshot, size: size)
                     try html.write(to: destination, atomically: true, encoding: .utf8)
                 }
             } catch {
                 model.error = error.localizedDescription
             }
         }
+    }
+
+    private func printDocument() {
+        guard let note = model.active, let window = model.renderer?.view.window ?? NSApp.keyWindow else { return }
+        let (snapshot, size) = exportSnapshot(for: note)
+        Task { @MainActor in
+            do {
+                let job = try await RenderView.preparePrint(snapshot, size: size)
+                guard window.isVisible, window.attachedSheet == nil else { return }
+                _ = await job.runModal(for: window)
+            } catch {
+                model.error = error.localizedDescription
+            }
+        }
+    }
+
+    private func exportSnapshot(for note: Note) -> (RenderSnapshot, CGSize) {
+        let renderer = model.renderer
+        var options = renderer?.options ?? RenderOptions()
+        options.interactive = false
+        let snapshot = RenderSnapshot(note.text, document: note.url, workspace: model.root, options: options)
+        let size = renderer?.view.bounds.size ?? .zero
+        return (snapshot, size.width > 0 && size.height > 0 ? size : CGSize(width: 820, height: 680))
     }
 }
 
@@ -248,9 +272,11 @@ private struct AsterSettings: View {
     @AppStorage(StoredSettings.workspaceLinksOnly) private var workspaceLinksOnly = false
     @State private var markdownDefault = MarkdownDefault.isDefault()
     @State private var defaultError: String?
+    #if !APP_STORE
     @State private var checkingForUpdates = false
     @State private var updateStatus: String?
     @State private var availableRelease: String?
+    #endif
 
     var body: some View {
         Form {
@@ -283,6 +309,8 @@ private struct AsterSettings: View {
             }
             Section("Privacy") {
                 Text("Notes stay in files on this Mac. Aster has no account and does not send notes or usage data.")
+                Link("Privacy Policy", destination: URL(string: "https://github.com/Kasakir-AI/Aster#privacy")!)
+                #if !APP_STORE
                 Button("Check for Updates") { Task { await checkForUpdates() } }
                     .disabled(checkingForUpdates)
                 if let updateStatus { Text(updateStatus) }
@@ -291,11 +319,13 @@ private struct AsterSettings: View {
                         NSWorkspace.shared.open(ReleaseLookup.releases)
                     }
                 }
+                #endif
             }
         }
         .formStyle(.grouped).frame(width: 450, height: 620)
     }
 
+    #if !APP_STORE
     private func checkForUpdates() async {
         checkingForUpdates = true
         availableRelease = nil
@@ -322,4 +352,5 @@ private struct AsterSettings: View {
             updateStatus = "Aster could not check for updates."
         }
     }
+    #endif
 }

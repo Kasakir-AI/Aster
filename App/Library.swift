@@ -67,7 +67,8 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     private var indexTask: Task<Void, Never>?
     private var pendingIndex: Task<Void, Never>?
     private var pendingSaves: [UUID: Task<Void, Never>] = [:]
-    private var scoped: [URL] = []
+    private let scopes = FolderAccess.Scopes()
+    private var bookmarked: Set<URL> = []
 
     struct Jump: Equatable { let id = UUID(); let line: Int }
     enum Sheet: String, Identifiable { case search, openQuickly, links; var id: Self { self } }
@@ -76,13 +77,13 @@ enum ReadingMode: String, CaseIterable, Identifiable {
         let note = Note()
         notes.append(note)
         selection = note.id
-        if mode == .read { mode = .source }
+        if mode == .read { showMode(.source) }
     }
 
     func open(_ url: URL, line: Int? = nil) {
         if url.scheme == "aster-markdown" { receiveXcode(url); return }
-        let url = url.resolvingSymlinksInPath().standardizedFileURL
-        grant(url)
+        guard url.isFileURL else { return }
+        let url = grant(url)
         if let note = notes.first(where: { $0.url == url }) {
             selection = note.id
         } else {
@@ -94,6 +95,7 @@ enum ReadingMode: String, CaseIterable, Identifiable {
                 NSDocumentController.shared.noteNewRecentDocumentURL(url)
             } catch {
                 self.error = error.localizedDescription
+                return
             }
         }
         if let line { go(to: line) }
@@ -118,9 +120,8 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     }
 
     func openWorkspace(_ url: URL) {
-        let url = url.resolvingSymlinksInPath().standardizedFileURL
-        grant(url)
-        root = url
+        guard url.isFileURL else { return }
+        root = grant(url)
         sidebar = true
         index = .empty
         refreshIndex()
@@ -152,34 +153,14 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     @discardableResult func save(_ note: Note? = nil, asNewFile: Bool = false, automatic: Bool = false) -> Bool {
         guard let note = note ?? active else { return false }
         if !asNewFile, let url = note.url {
-            guard url.resolvingSymlinksInPath() == url else {
-                if !automatic { return save(note, asNewFile: true) }
-                return false
-            }
-            checkDisk(note, readContents: true)
-            if note.conflict {
-                guard !automatic else { return false }
-                let alert = NSAlert()
-                alert.messageText = "The file changed on disk"
-                alert.informativeText = "Save your changes to a new file, or replace the disk version."
-                alert.addButton(withTitle: "Save a Copy")
-                alert.addButton(withTitle: "Replace")
-                alert.addButton(withTitle: "Cancel")
-                switch alert.runModal() {
-                case .alertFirstButtonReturn: return save(note, asNewFile: true)
-                case .alertSecondButtonReturn: break
-                default: return false
-                }
-            }
-            if !note.dirty && !note.conflict { return true }
-            return write(note, to: url)
+            return saveExisting(note, at: url, automatic: automatic)
         }
         let picker = NSSavePanel()
         picker.allowedContentTypes = [MarkdownFile.type]
         picker.nameFieldStringValue = note.url?.lastPathComponent ?? "Untitled.md"
         picker.directoryURL = root
         guard picker.runModal() == .OK, let url = picker.url else { return false }
-        let destination = url.resolvingSymlinksInPath().standardizedFileURL
+        let destination = grant(url)
         if let source = note.url, destination == source || url.standardizedFileURL == source {
             error = "Choose a different location for the copy."
             return false
@@ -188,29 +169,139 @@ enum ReadingMode: String, CaseIterable, Identifiable {
             error = "That file is already open in another tab."
             return false
         }
-        return write(note, to: destination)
-    }
-
-    private func write(_ note: Note, to url: URL) -> Bool {
         do {
-            guard let data = note.encoding.data(for: note.text) else {
-                error = "This document’s text encoding cannot represent one or more characters."
-                return false
+            let data = try encodedContents(of: note)
+            let modified = try coordinateWrite(at: destination, options: .forReplacing) { file in
+                guard file.path == destination.path, file.resolvingSymlinksInPath().path == file.path else {
+                    throw CocoaError(.fileWriteUnknown, userInfo: [NSLocalizedDescriptionKey: "The save location changed. Choose the location again."])
+                }
+                try data.write(to: file, options: .atomic)
+                return Self.modificationDate(at: file)
             }
-            try data.write(to: url, options: .atomic)
             grant(url)
-            note.url = url
-            note.saved = note.text
-            note.conflict = false
-            note.modified = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-            NSDocumentController.shared.noteNewRecentDocumentURL(url)
-            persist()
-            refreshIndex()
+            didSave(note, at: destination, modified: modified)
             return true
         } catch {
             self.error = error.localizedDescription
             return false
         }
+    }
+
+    private struct DiskVersion: Equatable {
+        let text: String?
+        let encoding: MarkdownFile.Encoding?
+        let modified: Date?
+        let size: Int?
+
+        init(at url: URL) {
+            let file = URL(fileURLWithPath: url.path)
+            let content = try? MarkdownFile.load(file)
+            let values = try? file.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+            text = content?.text
+            encoding = content?.encoding
+            modified = values?.contentModificationDate
+            size = values?.fileSize
+        }
+    }
+
+    private enum SaveResult {
+        case unchanged(DiskVersion)
+        case written(Date?)
+        case conflict(DiskVersion)
+        case moved
+    }
+
+    private func saveExisting(_ note: Note, at url: URL, automatic: Bool) -> Bool {
+        var versionToReplace: DiskVersion?
+        do {
+            while note.url == url {
+                guard url.resolvingSymlinksInPath().path == url.path else {
+                    note.conflict = true
+                    return automatic ? false : save(note, asNewFile: true)
+                }
+                let payload = note.dirty || versionToReplace != nil ? Result { try encodedContents(of: note) } : nil
+                let result: SaveResult = try coordinateWrite(at: url, options: []) { file in
+                    guard file.path == url.path, url.resolvingSymlinksInPath().path == url.path else { return .moved }
+                    let disk = DiskVersion(at: file)
+                    if let versionToReplace {
+                        guard disk == versionToReplace else { return .conflict(disk) }
+                    } else if conflicts(note, with: disk) {
+                        return .conflict(disk)
+                    }
+                    guard let payload else { return .unchanged(disk) }
+                    try payload.get().write(to: file, options: .atomic)
+                    return .written(Self.modificationDate(at: file))
+                }
+
+                switch result {
+                case .unchanged(let disk):
+                    apply(disk, to: note)
+                    return true
+                case .written(let modified):
+                    didSave(note, at: url, modified: modified)
+                    return true
+                case .moved:
+                    note.conflict = true
+                    return automatic ? false : save(note, asNewFile: true)
+                case .conflict(let disk):
+                    note.conflict = true
+                    guard !automatic else { return false }
+                    let alert = NSAlert()
+                    alert.messageText = versionToReplace == nil ? "The file changed on disk" : "The file changed again on disk"
+                    alert.informativeText = "Save your changes to a new file, or replace the disk version."
+                    alert.addButton(withTitle: "Save a Copy")
+                    alert.addButton(withTitle: "Replace")
+                    alert.addButton(withTitle: "Cancel")
+                    switch alert.runModal() {
+                    case .alertFirstButtonReturn: return save(note, asNewFile: true)
+                    case .alertSecondButtonReturn: versionToReplace = disk
+                    default: return false
+                    }
+                }
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+        return false
+    }
+
+    private func coordinateWrite<Value>(at url: URL, options: NSFileCoordinator.WritingOptions,
+                                        _ body: (URL) throws -> Value) throws -> Value {
+        var coordinationError: NSError?
+        var result: Result<Value, Error> = .failure(CocoaError(.fileWriteUnknown))
+        NSFileCoordinator().coordinate(writingItemAt: url, options: options, error: &coordinationError) { file in
+            result = Result { try body(file) }
+        }
+        if let coordinationError { throw coordinationError }
+        return try result.get()
+    }
+
+    private func encodedContents(of note: Note) throws -> Data {
+        guard let data = note.encoding.data(for: note.text) else {
+            throw CocoaError(.fileWriteInapplicableStringEncoding, userInfo: [
+                NSLocalizedDescriptionKey: "This document’s text encoding cannot represent one or more characters."
+            ])
+        }
+        guard data.count <= MarkdownFile.maximumBytes else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [
+                NSLocalizedDescriptionKey: "Aster can save Markdown files up to 12 MB. Your changes are still in this tab."
+            ])
+        }
+        return data
+    }
+
+    private func didSave(_ note: Note, at url: URL, modified: Date?) {
+        note.url = url
+        note.saved = note.text
+        note.conflict = false
+        note.modified = modified
+        NSDocumentController.shared.noteNewRecentDocumentURL(url)
+        persist()
+        refreshIndex()
+    }
+
+    private static func modificationDate(at url: URL) -> Date? {
+        try? URL(fileURLWithPath: url.path).resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
     }
 
     func close(_ note: Note) {
@@ -239,25 +330,28 @@ enum ReadingMode: String, CaseIterable, Identifiable {
         for note in notes { checkDisk(note) }
     }
 
-    private func checkDisk(_ note: Note, readContents: Bool = false) {
+    private func checkDisk(_ note: Note) {
         guard let url = note.url else { return }
-        let date = try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-        guard readContents || date != note.modified else { return }
-        guard let content = try? MarkdownFile.load(url) else {
+        guard url.resolvingSymlinksInPath().path == url.path else {
             note.conflict = true
             return
         }
-        if note.dirty, content.text != note.saved {
-            note.conflict = true
-        } else {
-            if !note.dirty {
-                note.text = content.text
-                note.saved = content.text
-                note.encoding = content.encoding
-            }
-            note.conflict = false
-            note.modified = date
+        guard Self.modificationDate(at: url) != note.modified else { return }
+        apply(DiskVersion(at: url), to: note)
+    }
+
+    private func conflicts(_ note: Note, with disk: DiskVersion) -> Bool {
+        disk.text == nil || (note.dirty && (disk.text != note.saved || disk.encoding != note.encoding))
+    }
+
+    private func apply(_ disk: DiskVersion, to note: Note) {
+        note.conflict = conflicts(note, with: disk)
+        if !note.conflict, !note.dirty, let text = disk.text, let encoding = disk.encoding {
+            note.text = text
+            note.saved = text
+            note.encoding = encoding
         }
+        if !note.conflict { note.modified = disk.modified }
     }
 
     func go(to line: Int) { jump = Jump(line: line) }
@@ -281,10 +375,7 @@ enum ReadingMode: String, CaseIterable, Identifiable {
 
     func follow(_ address: String) {
         if let source = active?.url, let match = WorkspaceIndex.wikiMatch(address, among: wikiNotes(near: source), near: source) {
-            if UserDefaults.standard.bool(forKey: StoredSettings.workspaceLinksOnly),
-               !FolderAccess.linkStaysInside(match.url, workspace: root, document: source) {
-                return
-            }
+            guard canFollowLocalLink(match.url, from: source) else { return }
             open(match.url)
             if active?.url == match.url, let heading = match.heading,
                let found = WorkspaceIndex.heading(matching: heading, in: active?.text ?? "") {
@@ -297,10 +388,7 @@ enum ReadingMode: String, CaseIterable, Identifiable {
             return
         }
         guard let source = active?.url, let target = MarkdownFile.localURL(address, relativeTo: source) else { return }
-        if UserDefaults.standard.bool(forKey: StoredSettings.workspaceLinksOnly),
-           !FolderAccess.linkStaysInside(target, workspace: root, document: source) {
-            return
-        }
+        guard canFollowLocalLink(target, from: source) else { return }
         if MarkdownFile.isMarkdown(target) {
             open(target)
             if active?.url == target, let fragment = address.split(separator: "#", maxSplits: 1).dropFirst().first,
@@ -310,6 +398,11 @@ enum ReadingMode: String, CaseIterable, Identifiable {
         } else if FileManager.default.fileExists(atPath: target.path) {
             NSWorkspace.shared.activateFileViewerSelecting([target])
         }
+    }
+
+    func canFollowLocalLink(_ target: URL, from source: URL) -> Bool {
+        !UserDefaults.standard.bool(forKey: StoredSettings.workspaceLinksOnly)
+            || FolderAccess.linkStaysInside(target, workspace: root, document: source)
     }
 
     func toggleTask(_ line: Int) {
@@ -337,17 +430,34 @@ enum ReadingMode: String, CaseIterable, Identifiable {
     }
 
     func restore() {
-        restoreAccess()
         let defaults = UserDefaults.standard
+        let reopen = defaults.object(forKey: StoredSettings.restoreSession) as? Bool ?? true
+        let locations = restoreAccess(refreshStale: reopen)
         if let value = defaults.string(forKey: StoredSettings.viewMode), let previous = ReadingMode(rawValue: value) { mode = previous }
-        guard defaults.object(forKey: StoredSettings.restoreSession) as? Bool ?? true else { return }
-        if let folder = defaults.url(forKey: StoredSettings.workspace), FileManager.default.fileExists(atPath: folder.path) {
-            root = folder.standardizedFileURL
+        guard reopen else { return }
+        let previousRoot = defaults.url(forKey: StoredSettings.workspace)
+        if let folder = previousRoot {
+            let restored = locations[folder.path] ?? folder
+            if FileManager.default.fileExists(atPath: restored.path) { root = restored.standardizedFileURL }
         }
+
+        func restoredURL(for path: String) -> URL {
+            if let restored = locations[path] { return restored }
+            if let previousRoot, let root, previousRoot != root {
+                let prefix = previousRoot.path + "/"
+                if path.hasPrefix(prefix) {
+                    return root.appending(path: String(path.dropFirst(prefix.count))).standardizedFileURL
+                }
+            }
+            return URL(fileURLWithPath: path)
+        }
+
         let paths = defaults.stringArray(forKey: StoredSettings.openDocuments) ?? []
         let selectedPath = defaults.string(forKey: StoredSettings.selectedDocument)
-        for path in paths where FileManager.default.fileExists(atPath: path) { open(URL(fileURLWithPath: path)) }
-        if let selectedPath, let note = notes.first(where: { $0.url?.path == selectedPath }) { selection = note.id }
+        for url in paths.map(restoredURL(for:)) where FileManager.default.fileExists(atPath: url.path) { open(url) }
+        if let selectedPath, let note = notes.first(where: { $0.url == restoredURL(for: selectedPath) }) {
+            selection = note.id
+        }
         refreshIndex()
         persist()
     }
@@ -381,33 +491,43 @@ enum ReadingMode: String, CaseIterable, Identifiable {
         let stored = UserDefaults.standard.object(forKey: StoredSettings.documentViewModes) as? [String: String] ?? [:]
         let fallback = UserDefaults.standard.string(forKey: StoredSettings.viewMode).flatMap(ReadingMode.init(rawValue:)) ?? .read
         let saved = DocumentModes.raw(for: path, in: stored).flatMap(ReadingMode.init(rawValue:)) ?? fallback
-        guard saved != mode else { return }
+        showMode(saved)
+    }
+
+    private func showMode(_ mode: ReadingMode) {
+        guard mode != self.mode else { return }
         suppressModeSave = true
-        mode = saved
+        self.mode = mode
         suppressModeSave = false
     }
 
-    private func restoreAccess() {
-        let blobs = UserDefaults.standard.object(forKey: StoredSettings.folderBookmarks) as? [Data] ?? []
-        for data in blobs {
-            guard let url = FolderAccess.resolve(data) else { continue }
-            retain(url.resolvingSymlinksInPath().standardizedFileURL)
+    private func restoreAccess(refreshStale: Bool) -> [String: URL] {
+        let defaults = UserDefaults.standard
+        let blobs = defaults.array(forKey: StoredSettings.folderBookmarks) as? [Data] ?? []
+        var locations: [String: URL] = [:]
+        let refreshed = blobs.map { data in
+            guard let resolved = FolderAccess.resolve(data) else { return data }
+            let canonical = scopes.retain(resolved.url)
+            bookmarked.insert(canonical)
+            if let path = FolderAccess.previousPath(of: data) { locations[path] = canonical }
+            if refreshStale, resolved.stale, let replacement = FolderAccess.bookmark(for: resolved.url) { return replacement }
+            return data
         }
+        if refreshed != blobs { defaults.set(refreshed, forKey: StoredSettings.folderBookmarks) }
+        return locations
     }
 
-    private func grant(_ url: URL) {
-        let url = url.resolvingSymlinksInPath().standardizedFileURL
-        if scoped.contains(where: { $0 == url || FolderAccess.contains(url, in: $0) }) { return }
-        retain(url)
-        guard let data = FolderAccess.bookmark(for: url) else { return }
-        var blobs = UserDefaults.standard.object(forKey: StoredSettings.folderBookmarks) as? [Data] ?? []
+    @discardableResult
+    private func grant(_ url: URL) -> URL {
+        let canonical = scopes.retain(url)
+        guard !bookmarked.contains(where: { FolderAccess.contains(canonical, in: $0) }),
+              let data = FolderAccess.bookmark(for: url) else { return canonical }
+        bookmarked.insert(canonical)
+        let defaults = UserDefaults.standard
+        var blobs = defaults.array(forKey: StoredSettings.folderBookmarks) as? [Data] ?? []
         blobs.append(data)
-        UserDefaults.standard.set(blobs, forKey: StoredSettings.folderBookmarks)
-    }
-
-    private func retain(_ url: URL) {
-        _ = url.startAccessingSecurityScopedResource()
-        scoped.append(url)
+        defaults.set(blobs, forKey: StoredSettings.folderBookmarks)
+        return canonical
     }
 
     private func scheduleIndexRefresh() {
@@ -421,7 +541,7 @@ enum ReadingMode: String, CaseIterable, Identifiable {
 
     private func receiveXcode(_ url: URL) {
         guard let source = PreviewTransfer.source(from: url) else { return }
-        if let note = notes.first(where: { $0.url == nil && $0.titleOverride == "Xcode Preview" }) {
+        if let note = notes.first(where: { $0.url == nil && $0.titleOverride == "Xcode Preview" && !$0.dirty }) {
             note.text = source
             note.saved = source
             note.conflict = false
@@ -431,8 +551,6 @@ enum ReadingMode: String, CaseIterable, Identifiable {
             notes.append(note)
             selection = note.id
         }
-        let remembered = UserDefaults.standard.object(forKey: StoredSettings.viewMode)
-        if mode == .source || mode == .styled { mode = .read }
-        UserDefaults.standard.set(remembered, forKey: StoredSettings.viewMode)
+        if mode == .source || mode == .styled { showMode(.read) }
     }
 }

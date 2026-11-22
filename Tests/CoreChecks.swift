@@ -93,6 +93,12 @@ import UniformTypeIdentifiers
         precondition(ImageAsset.read(asset("inside.png"), document: note, directory: images)?.data == bytes)
         precondition(ImageAsset.read(asset("../Images-secret/secret.png"), document: note, directory: images) == nil)
         precondition(ImageAsset.read(asset("linked.png"), document: note, directory: images) == nil)
+        let localSource = asset("inside.png").absoluteString
+        let literal = #"<pre><code>src="\#(localSource)" &lt;img src="\#(localSource)"&gt;</code></pre>"#
+        let image = #"<img alt="A > B" src="\#(localSource)">"#
+        let embedded = ImageAsset.replacingSources(in: literal + image) { _ in "data:image/png;base64,AAAA" }
+        precondition(embedded == literal + #"<img alt="A > B" src="data:image/png;base64,AAAA">"#,
+                     "Export should embed the image and preserve the code example")
         for encoding: MarkdownFile.Encoding in [.utf8, .utf8BOM, .utf16LE, .utf16BE] {
             let sample = "File encoding 🪻"
             let bytes = encoding.data(for: sample)!

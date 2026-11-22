@@ -15,9 +15,35 @@ struct RenderOptions: Equatable {
     }
 }
 
-final class LocalImageLoader: NSObject, WKURLSchemeHandler {
-    var document: URL?
-    var directory: URL?
+struct RenderSnapshot: Equatable {
+    struct LocalAssets: Equatable {
+        let document: URL
+        let directory: URL
+    }
+
+    let text: String
+    let assets: LocalAssets?
+    let options: RenderOptions
+
+    init(_ text: String, document: URL?, workspace: URL? = nil, options: RenderOptions = RenderOptions()) {
+        self.text = text
+        self.options = options
+        self.assets = document.map { url in
+            let directory = workspace.flatMap { FolderAccess.contains(url, in: $0) ? $0 : nil }
+            return LocalAssets(document: url, directory: directory ?? url.deletingLastPathComponent())
+        }
+    }
+}
+
+private final class LocalImageLoader: NSObject, WKURLSchemeHandler {
+    private var assets: RenderSnapshot.LocalAssets?
+    private(set) var scope = UUID().uuidString
+
+    func update(_ assets: RenderSnapshot.LocalAssets?) {
+        guard self.assets != assets else { return }
+        self.assets = assets
+        scope = UUID().uuidString
+    }
 
     func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
         guard let address = task.request.url, let asset = image(at: address) else {
@@ -31,8 +57,8 @@ final class LocalImageLoader: NSObject, WKURLSchemeHandler {
     }
 
     func image(at address: URL) -> (mime: String, data: Data)? {
-        guard let document, let directory else { return nil }
-        return ImageAsset.read(address, document: document, directory: directory)
+        guard let assets, address.query == "scope=" + scope else { return nil }
+        return ImageAsset.read(address, document: assets.document, directory: assets.directory)
     }
 
     func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
@@ -41,10 +67,11 @@ final class LocalImageLoader: NSObject, WKURLSchemeHandler {
 final class RenderView: NSViewController, WKNavigationDelegate, WKScriptMessageHandler {
     private let imageLoader = LocalImageLoader()
     private var webView: WKWebView!
+    private let previewURL = Bundle.main.url(forResource: "preview", withExtension: "html", subdirectory: "Bundle")
     private var ready = false
-    private var source = ""
-    private var options = RenderOptions()
-    private var document: URL?
+    private var snapshot: RenderSnapshot?
+    private var revision = 0
+    var options: RenderOptions { snapshot?.options ?? RenderOptions() }
     private var preserveScroll = false
     private var targetLine: Int?
     private var previewCompletion: ((Error?) -> Void)?
@@ -59,22 +86,17 @@ final class RenderView: NSViewController, WKNavigationDelegate, WKScriptMessageH
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
         view = webView
-        guard let url = Bundle.main.url(forResource: "preview", withExtension: "html", subdirectory: "Bundle") else { return }
-        webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        guard let previewURL else { return }
+        webView.loadFileURL(previewURL, allowingReadAccessTo: previewURL.deletingLastPathComponent())
     }
 
-    func update(_ text: String, url: URL?, directory: URL?, options: RenderOptions) {
-        guard self.source != text || self.document != url || self.options != options || imageLoader.directory != directory else {
-            if ready { finishPreview(nil) }
-            return
-        }
-        preserveScroll = document == url
+    func update(_ snapshot: RenderSnapshot) {
+        guard self.snapshot != snapshot else { return }
+        preserveScroll = self.snapshot?.assets?.document == snapshot.assets?.document
         if !preserveScroll { targetLine = nil }
-        source = text
-        document = url
-        self.options = options
-        imageLoader.document = url
-        imageLoader.directory = directory ?? url?.deletingLastPathComponent()
+        self.snapshot = snapshot
+        revision += 1
+        imageLoader.update(snapshot.assets)
         if ready {
             renderTask?.cancel()
             renderTask = Task { @MainActor in
@@ -85,11 +107,20 @@ final class RenderView: NSViewController, WKNavigationDelegate, WKScriptMessageH
         }
     }
 
-    func prepare(_ text: String, url: URL, completion: @escaping (Error?) -> Void) {
+    func prepare(_ snapshot: RenderSnapshot, completion: @escaping (Error?) -> Void) {
         finishPreview(CancellationError())
+        guard previewURL != nil else {
+            completion(CocoaError(.fileReadNoSuchFile))
+            return
+        }
         previewCompletion = completion
         _ = view
-        update(text, url: url, directory: url.deletingLastPathComponent(), options: RenderOptions())
+        if self.snapshot == snapshot, ready {
+            renderTask?.cancel()
+            render()
+        } else {
+            update(snapshot)
+        }
     }
 
     func jump(to line: Int) {
@@ -109,12 +140,18 @@ final class RenderView: NSViewController, WKNavigationDelegate, WKScriptMessageH
         webView.find(query, configuration: settings) { _ in }
     }
 
-    func makePDF() async throws -> Data {
-        try await webView.pdf()
+    static func makePDF(of snapshot: RenderSnapshot, size: CGSize) async throws -> Data {
+        let renderer = try await prepareExport(snapshot, size: size)
+        return try await renderer.webView.pdf()
     }
 
-    func html() async throws -> String {
-        let content = try await webView.callAsyncJavaScript("return await exportContent()", arguments: [:], in: nil, contentWorld: .page)
+    static func html(of snapshot: RenderSnapshot, size: CGSize) async throws -> String {
+        let renderer = try await prepareExport(snapshot, size: size)
+        return try await renderer.renderedHTML()
+    }
+
+    private func renderedHTML() async throws -> String {
+        let content = try await webView.callAsyncJavaScript("return exportContent()", arguments: [:], in: nil, contentWorld: .page)
         let cssURL = Bundle.main.url(forResource: "paper", withExtension: "css", subdirectory: "Bundle")
         guard let cssURL, let article = content as? String else { throw CocoaError(.fileReadCorruptFile) }
         let css = try String(contentsOf: cssURL, encoding: .utf8)
@@ -129,14 +166,50 @@ final class RenderView: NSViewController, WKNavigationDelegate, WKScriptMessageH
         """
     }
 
-    func printDocument() {
-        let info = NSPrintInfo.shared.copy() as! NSPrintInfo
-        let operation = webView.printOperation(with: info)
-        if let window = view.window {
-            operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
-        } else {
-            operation.run()
+    static func preparePrint(_ snapshot: RenderSnapshot, size: CGSize) async throws -> PrintJob {
+        let renderer = try await prepareExport(snapshot, size: size)
+        return PrintJob(renderer: renderer, operation: renderer.webView.printOperation(with: NSPrintInfo.shared))
+    }
+
+    @MainActor final class PrintJob: NSObject {
+        let operation: NSPrintOperation
+        private let renderer: RenderView
+        private var completion: CheckedContinuation<Bool, Never>?
+
+        fileprivate init(renderer: RenderView, operation: NSPrintOperation) {
+            self.renderer = renderer
+            self.operation = operation
         }
+
+        func runModal(for window: NSWindow) async -> Bool {
+            defer { withExtendedLifetime(self) {} }
+            return await withCheckedContinuation { continuation in
+                completion = continuation
+                operation.runModal(for: window, delegate: self, didRun: #selector(didPrint), contextInfo: nil)
+            }
+        }
+
+        @objc private func didPrint(_ operation: NSPrintOperation, success: Bool, contextInfo: UnsafeMutableRawPointer?) {
+            let continuation = completion
+            completion = nil
+            continuation?.resume(returning: success)
+        }
+    }
+
+    private static func prepareExport(_ snapshot: RenderSnapshot, size: CGSize) async throws -> RenderView {
+        let renderer = RenderView()
+        renderer.view.frame.size = size
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            renderer.prepare(snapshot) { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+        _ = try await renderer.webView.callAsyncJavaScript("await waitForImages()", arguments: [:], in: nil, contentWorld: .page)
+        return renderer
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -148,29 +221,49 @@ final class RenderView: NSViewController, WKNavigationDelegate, WKScriptMessageH
         finishPreview(error)
     }
 
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        finishPreview(error)
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        finishPreview(WKError(.webContentProcessTerminated))
+    }
+
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        if !ready, navigationAction.request.url?.lastPathComponent == "preview.html" {
-            decisionHandler(.allow)
-        } else if navigationAction.request.url?.fragment != nil,
-                  navigationAction.request.url?.deletingLastPathComponent() == webView.url?.deletingLastPathComponent(),
-                  navigationAction.request.url?.lastPathComponent == "preview.html" {
-            decisionHandler(.allow)
-        } else {
+        let address = navigationAction.request.url
+        let samePageFragment = navigationAction.sourceFrame.isMainFrame && address?.fragment != nil
+        guard navigationAction.targetFrame?.isMainFrame == true,
+              isPreviewPage(address), !ready || samePageFragment else {
             decisionHandler(.cancel)
+            return
         }
+        decisionHandler(.allow)
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let body = message.body as? [String: Any], let kind = body["kind"] as? String, let value = body["value"] else { return }
+        guard message.frameInfo.isMainFrame, isPreviewPage(message.frameInfo.request.url),
+              let body = message.body as? [String: Any],
+              let kind = body["kind"] as? String, let value = body["value"] else { return }
         receive?(kind, value)
     }
 
+    private func isPreviewPage(_ address: URL?) -> Bool {
+        guard let previewURL, let address,
+              var components = URLComponents(url: address, resolvingAgainstBaseURL: false) else { return false }
+        components.fragment = nil
+        return components.url == previewURL
+    }
+
     private func render() {
+        guard let snapshot else { return }
+        let revision = revision
+        var arguments = snapshot.options.arguments(preserveScroll: preserveScroll)
+        arguments["assetScope"] = imageLoader.scope
         webView.callAsyncJavaScript("await render(source, options)",
-                                   arguments: ["source": source, "options": options.arguments(preserveScroll: preserveScroll)],
+                                   arguments: ["source": snapshot.text, "options": arguments],
                                    in: nil, in: .page) { [weak self] result in
-            guard let self else { return }
+            guard let self, self.revision == revision else { return }
             if let line = self.targetLine {
                 self.jump(to: line)
                 self.targetLine = nil

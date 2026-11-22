@@ -136,14 +136,22 @@ article.addEventListener("change", event => {
     post("task", Number(event.target.dataset.taskLine));
   }
 });
+function replaceFailedImage(image) {
+  const placeholder = document.createElement("span");
+  placeholder.className = "image-placeholder";
+  placeholder.textContent = image.alt;
+  image.replaceWith(placeholder);
+}
+
 article.addEventListener("error", event => {
-  if (event.target.tagName === "IMG") {
-    const placeholder = document.createElement("span");
-    placeholder.className = "image-placeholder";
-    placeholder.textContent = event.target.alt;
-    event.target.replaceWith(placeholder);
-  }
+  if (event.target.tagName === "IMG") replaceFailedImage(event.target);
 }, true);
+
+window.waitForImages = async () => {
+  await Promise.all(Array.from(article.querySelectorAll("img"), image =>
+    image.decode().catch(() => replaceFailedImage(image))
+  ));
+};
 
 window.exportContent = () => {
   const clone = article.cloneNode(true);

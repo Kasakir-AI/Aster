@@ -79,7 +79,11 @@ The build installs the locked renderer dependencies, runs the tests, and creates
 
 ## Privacy
 
-Notes stay in files on this Mac. Aster has no account. It does not send notes or usage data. Check for Updates in Settings asks GitHub whether a newer release exists. That check does not download the release. Report a Bug and Request a Feature open a GitHub issue only when you choose them.
+Aster has no account, analytics, or tracking. It reads and saves Markdown files you choose and keeps your notes on your Mac. You control how long to keep those files.
+
+Aster stores preferences, recent file locations, and permission bookmarks on your Mac. In Settings, you can turn off reopening files and workspaces. Choose **File → Open Recent → Clear Menu** to clear the recent file menu. Removing Aster’s local app data clears its saved preferences and permission bookmarks.
+
+Web links open in your browser. Report a Bug and Request a Feature open GitHub with the Aster version filled in. You choose what else to share. In the direct download, Check for Updates asks GitHub whether a newer release exists. Aster does not send notes or usage data.
 
 ## Contributing
 

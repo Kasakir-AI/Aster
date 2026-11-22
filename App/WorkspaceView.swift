@@ -49,6 +49,7 @@ struct WorkspaceView: View {
                 Picker("View mode", selection: $model.mode) {
                     ForEach(ReadingMode.allCases) { mode in
                         Label(mode.rawValue, systemImage: mode.icon).tag(mode)
+                            .accessibilityLabel(mode.rawValue)
                             .help(mode.rawValue)
                     }
                 }.pickerStyle(.segmented).labelsHidden().disabled(model.active == nil)
@@ -91,10 +92,10 @@ struct WorkspaceView: View {
                     .font(.system(size: 13, weight: .semibold)).lineLimit(1)
                 Spacer()
                 Button { model.chooseWorkspace() } label: { Image(systemName: "folder.badge.plus") }
-                    .buttonStyle(.plain).help("Open Workspace")
+                    .buttonStyle(.plain).accessibilityLabel("Open Workspace").help("Open Workspace")
                 if model.root != nil {
                     Button { model.refreshIndex() } label: { Image(systemName: "arrow.clockwise") }
-                        .buttonStyle(.plain).help("Refresh Workspace")
+                        .buttonStyle(.plain).accessibilityLabel("Refresh Workspace").help("Refresh Workspace")
                 }
             }.padding(.horizontal, 14).padding(.vertical, 12)
             Divider()
@@ -305,10 +306,7 @@ private struct PreviewPane: NSViewControllerRepresentable {
             default: break
             }
         }
-        let workspace = model.root.flatMap { root in
-            note.url?.path.hasPrefix(root.path + "/") == true ? root : nil
-        }
-        renderer.update(note.text, url: note.url, directory: workspace ?? note.url?.deletingLastPathComponent(), options: options)
+        renderer.update(RenderSnapshot(note.text, document: note.url, workspace: model.root, options: options))
         if let jump = model.jump, context.coordinator.lastJump != jump.id {
             context.coordinator.lastJump = jump.id
             renderer.jump(to: jump.line)

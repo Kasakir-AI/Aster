@@ -108,7 +108,53 @@ import AppKit
         precondition(editor.backgroundColor == AsterPalette.light.page)
         precondition(foreground("café") == AsterPalette.light.emphasis,
                      "Switching appearance must refresh existing highlights")
-        print("Appearance checks passed")
+        try documentChecks()
+        print("Appearance and document checks passed")
+    }
+
+    private static func documentChecks() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let url = folder.appending(path: "Note.md")
+        let original = "# On disk"
+        try Data(original.utf8).write(to: url)
+        let model = Library()
+
+        UserDefaults.standard.set(ReadingMode.read.rawValue, forKey: StoredSettings.viewMode)
+        model.newNote()
+        precondition(model.mode == .source, "New notes should open ready to type")
+        model.open(url)
+        precondition(model.mode == .read, "Creating a draft should not change the default view")
+
+        let opened = model.active!
+        model.open(folder.appending(path: "Missing.md"), line: 12)
+        precondition(model.active === opened && model.jump == nil, "A failed open must not navigate the current note")
+
+        model.root = folder
+        let outside = folder.deletingLastPathComponent().appending(path: "Outside.md")
+        UserDefaults.standard.set(true, forKey: StoredSettings.workspaceLinksOnly)
+        precondition(model.canFollowLocalLink(url, from: url) && !model.canFollowLocalLink(outside, from: url),
+                     "Workspace link navigation should stay inside the workspace")
+        UserDefaults.standard.set(false, forKey: StoredSettings.workspaceLinksOnly)
+        precondition(model.canFollowLocalLink(outside, from: url), "External links should follow the setting")
+
+        opened.text = String(repeating: "é", count: 6 * 1024 * 1024 + 1)
+        let didSave = model.save(opened, automatic: true)
+        let onDisk = try String(contentsOf: url, encoding: .utf8)
+        precondition(!didSave && onDisk == original && opened.dirty,
+                     "The encoded-size limit must preserve both the current file and the edited draft")
+
+        model.open(PreviewTransfer.address(for: "First preview")!)
+        let draft = model.active!
+        draft.text = "Local draft"
+        model.open(PreviewTransfer.address(for: "Second preview")!)
+        let refreshed = model.active!
+        precondition(refreshed !== draft && draft.dirty && draft.text == "Local draft",
+                     "Incoming Xcode previews must preserve locally edited previews")
+        model.open(PreviewTransfer.address(for: "Third preview")!)
+        precondition(model.active === refreshed && refreshed.text == "Third preview" && !refreshed.dirty,
+                     "Incoming Xcode previews may reuse a clean preview")
     }
 
     private static func contrast(_ first: NSColor, _ second: NSColor) -> Double {

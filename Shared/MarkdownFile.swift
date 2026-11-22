@@ -39,12 +39,40 @@ enum FolderAccess {
     }
 
     static func bookmark(for url: URL) -> Data? {
-        try? url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: nil, relativeTo: nil)
+        try? url.bookmarkData(options: [.withSecurityScope], includingResourceValuesForKeys: [.pathKey], relativeTo: nil)
     }
 
-    static func resolve(_ data: Data) -> URL? {
+    static func resolve(_ data: Data) -> (url: URL, stale: Bool)? {
         var stale = false
-        return try? URL(resolvingBookmarkData: data, options: [.withSecurityScope], relativeTo: nil, bookmarkDataIsStale: &stale)
+        guard let url = try? URL(resolvingBookmarkData: data, options: [.withSecurityScope, .withoutUI, .withoutMounting],
+                                 relativeTo: nil, bookmarkDataIsStale: &stale) else { return nil }
+        return (url, stale)
+    }
+
+    static func previousPath(of data: Data) -> String? {
+        URL.resourceValues(forKeys: [.pathKey], fromBookmarkData: data)?.path
+    }
+
+    final class Scopes {
+        private var active: [URL: URL] = [:]
+
+        func retain(_ url: URL) -> URL {
+            if let address = active.first(where: { $0.value == url || $0.key == url })?.key { return address }
+            let started = url.startAccessingSecurityScopedResource()
+            let canonical = url.resolvingSymlinksInPath().standardizedFileURL
+            if started {
+                if active[canonical] == nil {
+                    active[canonical] = url
+                } else {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            return canonical
+        }
+
+        deinit {
+            for url in active.values { url.stopAccessingSecurityScopedResource() }
+        }
     }
 
     static func linkStaysInside(_ target: URL, workspace: URL?, document: URL) -> Bool {
@@ -63,6 +91,7 @@ enum IssueReport {
     }
 }
 
+#if !APP_STORE
 enum ReleaseLookup {
     static let latest = URL(string: "https://api.github.com/repos/Kasakir-AI/Aster/releases/latest")!
     static let releases = URL(string: "https://github.com/Kasakir-AI/Aster/releases/latest")!
@@ -84,7 +113,10 @@ enum ReleaseLookup {
     }
 }
 
+#endif
+
 enum MarkdownFile {
+    static let maximumBytes = 12 * 1024 * 1024
     static let extensions = ["md", "markdown", "mdown", "mkd", "mkdn", "mdwn", "mdtxt"]
     static let type = UTType(importedAs: "net.daringfireball.markdown", conformingTo: .plainText)
 
@@ -99,7 +131,7 @@ enum MarkdownFile {
         type.conforms(to: .data)
     }
 
-    enum Encoding {
+    enum Encoding: Equatable {
         case utf8, utf8BOM, utf16LE, utf16BE, legacy(String.Encoding)
 
         func data(for text: String) -> Data? {
@@ -115,7 +147,7 @@ enum MarkdownFile {
 
     static func load(_ url: URL) throws -> (text: String, encoding: Encoding) {
         let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        guard size <= 12 * 1024 * 1024 else {
+        guard size <= maximumBytes else {
             throw CocoaError(.fileReadTooLarge, userInfo: [NSURLErrorKey: url])
         }
         let data = try Data(contentsOf: url)

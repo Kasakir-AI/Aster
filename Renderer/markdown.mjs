@@ -58,14 +58,15 @@ parser.renderer.rules.formula = (tokens, index) => {
   });
 };
 
-parser.renderer.rules.image = (tokens, index) => {
+parser.renderer.rules.image = (tokens, index, options, env) => {
   const token = tokens[index];
   const source = token.attrGet("src");
   const label = escape(token.content || "Image");
   if (!source || /^(?:[a-z][a-z\d+.-]*:|\/)/i.test(source)) {
     return '<span class="image-placeholder">' + label + "</span>";
   }
-  const address = "aster-asset://image/" + encodeURIComponent(source);
+  const scope = env.assetScope ? "?scope=" + encodeURIComponent(env.assetScope) : "";
+  const address = "aster-asset://image/" + encodeURIComponent(source) + scope;
   return '<img src="' + escape(address) + '" alt="' + label + '">';
 };
 
