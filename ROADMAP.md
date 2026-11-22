@@ -4,17 +4,12 @@ Aster reads and writes Markdown files on this Mac. It has no account. Notes stay
 
 ## Available now
 
-The [1.0.2 release](https://github.com/Kasakir-AI/Aster/releases/tag/v1.0.2) is available on GitHub and Homebrew. The downloads are signed with Developer ID and notarized by Apple. See the [changelog](CHANGELOG.md) for shipped changes.
-
-## In the unreleased candidate
-
-- HTML, PDF, and print output use the selected draft.
-- Aster can reopen renamed workspace folders and rechecks the disk version before replacing a changed file.
+The [1.0.3 release](https://github.com/Kasakir-AI/Aster/releases/tag/v1.0.3) is available on GitHub and Homebrew. The downloads are signed with Developer ID and notarized by Apple. A Mac App Store edition is in Apple's review. See the [changelog](CHANGELOG.md) for shipped changes.
 
 ## Next
 
-- Test how the Mac App Store build reopens files and workspaces from the direct download.
-- Verify Finder previews, thumbnails, and the Xcode preview command in the Store build.
+- Release the Mac App Store edition after Apple's review.
+- Confirm Finder previews, thumbnails, and the Xcode preview command in the store edition.
 
 ## Later
 

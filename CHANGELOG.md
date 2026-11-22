@@ -1,12 +1,13 @@
 # Changelog
 
-## Unreleased
+## 1.0.3
 
 - HTML, PDF, and print output reflect the selected draft, including unsaved edits.
 - If a file changes again before you replace it, Aster asks you to review the new change.
 - Aster can reopen a workspace after you rename its folder.
 - The Link Map follows the workspace-only link setting.
-- The Mac App Store build uses App Store updates. Aster Settings links to the privacy policy.
+- Diagrams are built from pinned, audited packages, and the app lists every bundled package's license.
+- Aster Settings links to the privacy policy. The Mac App Store edition gets updates through the App Store.
 
 ## 1.0.2
 
