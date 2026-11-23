@@ -97,6 +97,8 @@ enum SupportLinks {
     static let koFi = URL(string: "https://ko-fi.com/kasakir")!
     static let sponsors = URL(string: "https://github.com/sponsors/Kasakir-AI")!
     static let appStore = URL(string: "https://apps.apple.com/app/id6838112678")!
+    /// Turn on once Aster Markdown is live on the Mac App Store; until then the page says it is unavailable.
+    static let appStoreLive = false
     static let repository = URL(string: "https://github.com/Kasakir-AI/Aster")!
 }
 

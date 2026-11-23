@@ -330,7 +330,9 @@ private struct AsterSettings: View {
                 Text("Aster is free. If it helps you, you can support its development.")
                 Link("Buy Me a Coffee on Ko-fi", destination: SupportLinks.koFi)
                 Link("Sponsor on GitHub", destination: SupportLinks.sponsors)
-                Link("Buy Aster on the Mac App Store", destination: SupportLinks.appStore)
+                if SupportLinks.appStoreLive {
+                    Link("Buy Aster on the Mac App Store", destination: SupportLinks.appStore)
+                }
                 Link("Star Aster on GitHub", destination: SupportLinks.repository)
             }
             #endif

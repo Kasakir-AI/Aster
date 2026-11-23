@@ -4,7 +4,7 @@ Aster reads and writes Markdown files on this Mac. It has no account. Notes stay
 
 ## Available now
 
-The [1.0.4 release](https://github.com/Kasakir-AI/Aster/releases/tag/v1.0.4) is available on GitHub and Homebrew. The downloads are signed with Developer ID and notarized by Apple. A Mac App Store edition is in Apple's review. See the [changelog](CHANGELOG.md) for shipped changes.
+The [1.0.5 release](https://github.com/Kasakir-AI/Aster/releases/tag/v1.0.5) is available on GitHub and Homebrew. The downloads are signed with Developer ID and notarized by Apple. A Mac App Store edition is in Apple's review. See the [changelog](CHANGELOG.md) for shipped changes.
 
 ## Next
 
