@@ -36,6 +36,8 @@ Run `brew update` and `brew upgrade --cask kasakir-ai/tap/aster` to update.
 
 The release downloads are signed with Developer ID and notarized by Apple.
 
+Aster is also coming to the Mac App Store. Keep one edition installed. Both editions use the same app ID and settings, so a switch keeps your preferences, recent files, and folder permissions. To switch from Homebrew, run `brew uninstall --cask aster` before you install from the App Store.
+
 ### Finder Quick Look
 
 In Finder, select a Markdown file and press Space. If Finder shows raw text, look for **Aster Markdown Preview** under **System Settings → General → Login Items & Extensions → Quick Look**. Check for another enabled Markdown preview provider if Finder still shows a different preview.
