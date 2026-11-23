@@ -87,6 +87,10 @@ Aster stores preferences, recent file locations, and permission bookmarks on you
 
 Web links open in your browser. Report a Bug and Request a Feature open GitHub with the Aster version filled in. You choose what else to share. In the direct download, Check for Updates asks GitHub whether a newer release exists. Aster does not send notes or usage data.
 
+## Support Aster
+
+Aster is free to download here. To support its development, you can [buy Aster on the Mac App Store](https://apps.apple.com/app/id6838112678). It's the same app, with updates through the App Store. You can also [sponsor on GitHub](https://github.com/sponsors/Kasakir-AI), once or monthly, or star this repository so more people find it.
+
 ## Contributing
 
 Report a bug or send a change on [GitHub](https://github.com/Kasakir-AI/Aster/issues). Include the Aster version and the macOS version with a bug report. Planned work is listed in the [roadmap](ROADMAP.md).
