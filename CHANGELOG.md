@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.4
+
+- Settings has a Support section with links to Ko-fi, GitHub Sponsors, the Mac App Store edition, and the GitHub repository. The Help menu has **Support Aster on Ko-fi**. These links are only in the download from GitHub and Homebrew.
+
 ## 1.0.3
 
 - HTML, PDF, and print output reflect the selected draft, including unsaved edits.

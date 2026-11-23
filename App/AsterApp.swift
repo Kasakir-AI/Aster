@@ -127,6 +127,10 @@ private struct AsterCommands: Commands {
         CommandGroup(after: .help) {
             Button("Report a Bug") { report(feature: false) }
             Button("Request a Feature") { report(feature: true) }
+            #if !APP_STORE
+            Divider()
+            Button("Support Aster on Ko-fi") { NSWorkspace.shared.open(SupportLinks.koFi) }
+            #endif
         }
         CommandGroup(after: .toolbar) {
             Divider()
@@ -321,8 +325,17 @@ private struct AsterSettings: View {
                 }
                 #endif
             }
+            #if !APP_STORE
+            Section("Support") {
+                Text("Aster is free. If it helps you, you can support its development.")
+                Link("Buy Me a Coffee on Ko-fi", destination: SupportLinks.koFi)
+                Link("Sponsor on GitHub", destination: SupportLinks.sponsors)
+                Link("Buy Aster on the Mac App Store", destination: SupportLinks.appStore)
+                Link("Star Aster on GitHub", destination: SupportLinks.repository)
+            }
+            #endif
         }
-        .formStyle(.grouped).frame(width: 450, height: 620)
+        .formStyle(.grouped).frame(width: 450, height: 720)
     }
 
     #if !APP_STORE

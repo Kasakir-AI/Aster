@@ -92,6 +92,14 @@ enum IssueReport {
 }
 
 #if !APP_STORE
+/// Donation links stay out of the App Store build, which may not link to outside tips.
+enum SupportLinks {
+    static let koFi = URL(string: "https://ko-fi.com/kasakir")!
+    static let sponsors = URL(string: "https://github.com/sponsors/Kasakir-AI")!
+    static let appStore = URL(string: "https://apps.apple.com/app/id6838112678")!
+    static let repository = URL(string: "https://github.com/Kasakir-AI/Aster")!
+}
+
 enum ReleaseLookup {
     static let latest = URL(string: "https://api.github.com/repos/Kasakir-AI/Aster/releases/latest")!
     static let releases = URL(string: "https://github.com/Kasakir-AI/Aster/releases/latest")!
