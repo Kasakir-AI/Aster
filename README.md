@@ -89,7 +89,7 @@ Web links open in your browser. Report a Bug and Request a Feature open GitHub w
 
 ## Support Aster
 
-Aster is free to download here. To support its development, you can [buy Aster on the Mac App Store](https://apps.apple.com/app/id6838112678). It's the same app, with updates through the App Store. You can also [sponsor on GitHub](https://github.com/sponsors/Kasakir-AI), once or monthly, or star this repository so more people find it.
+Aster is free to download here. To support its development, you can [buy Aster on the Mac App Store](https://apps.apple.com/app/id6838112678). It's the same app, with updates through the App Store. You can also [buy me a coffee on Ko-fi](https://ko-fi.com/kasakir), [sponsor on GitHub](https://github.com/sponsors/Kasakir-AI) once or monthly, or star this repository so more people find it.
 
 ### Sponsors
 
